@@ -1,0 +1,45 @@
+run:
+  timeout: 5m
+
+issues:
+  exclude-dirs-use-default: true
+
+linters:
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - err113
+    - errcheck
+    - errorlint
+    - exhaustive
+    - gochecknoinits
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - goimports
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - nolintlint
+    - revive
+    - staticcheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+
+linters-settings:
+  golangci-lint-1:
+    min-confidence: 0.8
+  lll:
+    line-length: 100
+  gocyclo:
+    min-complexity: 10
