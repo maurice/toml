@@ -12,11 +12,6 @@ tasks:
     cmds:
       - chmod +x .git/hooks/pre-commit
 
-  install-tools:
-    desc: Install development tools
-    cmds:
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
   build:
     desc: Build the library
     cmds:
@@ -39,19 +34,17 @@ tasks:
 
   lint:
     desc: Run golangci-lint
-    deps:
-      - install-tools
     cmds:
-      - golangci-lint run ./...
+      - go tool golangci-lint run ./...
 
   check:
     desc: Run all checks (format, vet, build, test)
     cmds:
+      - task: test
       - task: fmt
       - task: lint
       - task: vet
       - task: build
-      - task: test
 
   clean:
     desc: Clean build artifacts

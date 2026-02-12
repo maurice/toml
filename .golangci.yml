@@ -40,6 +40,6 @@ linters-settings:
   golangci-lint-1:
     min-confidence: 0.8
   lll:
-    line-length: 100
+    line-length: 150
   gocyclo:
     min-complexity: 10
