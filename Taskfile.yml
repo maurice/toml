@@ -13,14 +13,39 @@ tasks:
       - chmod +x .git/hooks/pre-commit
 
   build:
+    desc: Build the library and binaries
+    cmds:
+      - task: build-lib
+      - task: build-decoder
+      - task: build-encoder
+
+  build-lib:
     desc: Build the library
     cmds:
       - go build ./...
+
+  build-decoder:
+    desc: Build the decoder binary
+    cmds:
+      - go build -o .bin/decoder ./cmd/decoder
+
+  build-encoder:
+    desc: Build the encoder binary
+    cmds:
+      - go build -o .bin/encoder ./cmd/encoder
 
   test:
     desc: Run tests with race detector and coverage
     cmds:
       - go test -v -race -coverprofile=coverage.out ./...
+
+  harness:
+    desc: Run toml-test
+    deps:
+      - build-encoder
+      - build-decoder
+    cmds:
+      - go tool toml-test test -decoder=.bin/decoder -encoder=.bin/encoder
 
   vet:
     desc: Run go vet
@@ -44,10 +69,11 @@ tasks:
       - task: fmt
       - task: lint
       - task: vet
-      - task: build
+      - task: build-lib
+      - task: harness
 
   clean:
     desc: Clean build artifacts
     cmds:
       - go clean ./...
-      - rm -f coverage.out
+      - rm -rf coverage.out .bin
