@@ -37,7 +37,7 @@ tasks:
   test:
     desc: Run tests with race detector and coverage
     cmds:
-      - go test -v -race -coverprofile=coverage.out ./...
+      - go test -v -race -coverprofile=coverage.out .
 
   harness:
     desc: Run toml-test
