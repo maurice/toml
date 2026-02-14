@@ -113,7 +113,7 @@ func TestNewKeyValue(t *testing.T) {
 }
 
 func TestNewKeyValue_QuotedKey(t *testing.T) {
-	kv := NewKeyValue("key with spaces", NewString("val"))
+	kv := NewKeyValue(`"key with spaces"`, NewString("val"))
 	if kv.KeyParts[0].Text != `"key with spaces"` {
 		t.Fatalf("expected quoted key, got %q", kv.KeyParts[0].Text)
 	}
@@ -420,6 +420,44 @@ func TestTableNode_InsertAt(t *testing.T) {
 	tbl.InsertAt(1, NewKeyValue("ip", NewString("127.0.0.1")))
 	got := d.String()
 	expected := "[server]\nhost = \"localhost\"\nip = \"127.0.0.1\"\nport = 8080\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+// --- Quoted key mutation tests ---
+
+func TestDocument_Delete_QuotedKeyInTable(t *testing.T) {
+	input := "[dog.\"tater.man\"]\ntype.name = \"pug\"\ncolor = \"brown\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	tbl := d.Table(`dog."tater.man"`)
+	if tbl == nil {
+		t.Fatal("expected to find table")
+	}
+	if !tbl.Delete("color") {
+		t.Fatal("expected Delete to return true")
+	}
+	got := d.String()
+	expected := "[dog.\"tater.man\"]\ntype.name = \"pug\"\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestDocument_DeleteTable_QuotedHeader(t *testing.T) {
+	input := "top = 1\n[dog.\"tater.man\"]\ntype = \"pug\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if !d.DeleteTable(`dog."tater.man"`) {
+		t.Fatal("expected DeleteTable to return true")
+	}
+	got := d.String()
+	expected := "top = 1\n"
 	if got != expected {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}

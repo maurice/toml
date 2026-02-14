@@ -134,7 +134,8 @@ func NewBool(v bool) *BooleanNode {
 }
 
 // NewKeyValue creates a new KeyValue node with standard formatting (key = val\n).
-// The key is automatically quoted if needed.
+// The key uses TOML dotted-key syntax: bare keys, "quoted keys", or 'literal keys'
+// joined by dots. Keys that aren't valid bare keys must be quoted.
 func NewKeyValue(key string, val Node) *KeyValue {
 	segs := parseDottedPath(key)
 	parts := makeKeyParts(segs)

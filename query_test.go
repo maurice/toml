@@ -2,6 +2,7 @@ package toml
 
 import (
 	"math"
+	"reflect"
 	"testing"
 )
 
@@ -486,5 +487,166 @@ func TestBooleanNode_Value_False(t *testing.T) {
 	b := d.Get("b").Val.(*BooleanNode)
 	if b.Value() {
 		t.Fatal("expected false")
+	}
+}
+
+// --- parseDottedPath tests ---
+
+func TestParseDottedPath_Simple(t *testing.T) {
+	got := parseDottedPath("foo")
+	want := []string{"foo"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_Dotted(t *testing.T) {
+	got := parseDottedPath("foo.bar")
+	want := []string{"foo", "bar"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_QuotedBasicWithDot(t *testing.T) {
+	got := parseDottedPath(`site."google.com"`)
+	want := []string{"site", "google.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_QuotedLiteralWithDot(t *testing.T) {
+	got := parseDottedPath(`site.'google.com'`)
+	want := []string{"site", "google.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_Mixed(t *testing.T) {
+	got := parseDottedPath(`a."b.c".'d.e'.f`)
+	want := []string{"a", "b.c", "d.e", "f"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_SpecTaterMan(t *testing.T) {
+	got := parseDottedPath(`dog."tater.man"`)
+	want := []string{"dog", "tater.man"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_BasicEscape(t *testing.T) {
+	got := parseDottedPath(`"key\nname"`)
+	want := []string{"key\nname"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestParseDottedPath_WhitespaceAroundDot(t *testing.T) {
+	got := parseDottedPath("a . b")
+	want := []string{"a", "b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+// --- Spec example: dotted keys with quoted segments ---
+
+func TestDocument_Get_QuotedDottedKey(t *testing.T) {
+	input := "name = \"Orange\"\nphysical.color = \"orange\"\nphysical.shape = \"round\"\nsite.\"google.com\" = true\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	kv := d.Get(`site."google.com"`)
+	if kv == nil {
+		t.Fatal("expected to find key site.\"google.com\"")
+	}
+	b, ok := kv.Val.(*BooleanNode)
+	if !ok {
+		t.Fatalf("expected BooleanNode, got %T", kv.Val)
+	}
+	if !b.Value() {
+		t.Fatal("expected true")
+	}
+
+	kv2 := d.Get("physical.color")
+	if kv2 == nil {
+		t.Fatal("expected to find key physical.color")
+	}
+	s, ok := kv2.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv2.Val)
+	}
+	if s.Value() != "orange" {
+		t.Fatalf("expected 'orange', got %q", s.Value())
+	}
+}
+
+func TestDocument_Table_QuotedHeader(t *testing.T) {
+	input := "[dog.\"tater.man\"]\ntype.name = \"pug\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	tbl := d.Table(`dog."tater.man"`)
+	if tbl == nil {
+		t.Fatal("expected to find table dog.\"tater.man\"")
+	}
+
+	kv := tbl.Get("type.name")
+	if kv == nil {
+		t.Fatal("expected to find key type.name in table")
+	}
+	s, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if s.Value() != "pug" {
+		t.Fatalf("expected 'pug', got %q", s.Value())
+	}
+}
+
+func TestDocument_Get_ThroughQuotedTable(t *testing.T) {
+	input := "[dog.\"tater.man\"]\ntype.name = \"pug\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	kv := d.Get(`dog."tater.man".type.name`)
+	if kv == nil {
+		t.Fatal("expected to find key dog.\"tater.man\".type.name")
+	}
+	s, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if s.Value() != "pug" {
+		t.Fatalf("expected 'pug', got %q", s.Value())
+	}
+}
+
+func TestDocument_Delete_QuotedDottedKey(t *testing.T) {
+	input := "name = \"Orange\"\nsite.\"google.com\" = true\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if !d.Delete(`site."google.com"`) {
+		t.Fatal("expected Delete to return true")
+	}
+	got := d.String()
+	expected := "name = \"Orange\"\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }

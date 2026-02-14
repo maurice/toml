@@ -9,7 +9,81 @@ import (
 // --- Path helpers ---
 
 func parseDottedPath(path string) []string {
-	return strings.Split(path, ".")
+	var segs []string
+	i := 0
+	for i < len(path) {
+		i = skipPathWs(path, i)
+		if i >= len(path) {
+			break
+		}
+		var seg string
+		seg, i = parsePathSegment(path, i)
+		segs = append(segs, seg)
+		i = skipPathWs(path, i)
+		if i < len(path) && path[i] == '.' {
+			i++
+		}
+	}
+	return segs
+}
+
+func skipPathWs(s string, i int) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	return i
+}
+
+func parsePathSegment(path string, i int) (string, int) {
+	if i >= len(path) {
+		return "", i
+	}
+	switch path[i] {
+	case '"':
+		return parsePathBasicString(path, i)
+	case '\'':
+		return parsePathLiteralString(path, i)
+	default:
+		return parsePathBareKey(path, i)
+	}
+}
+
+func parsePathBasicString(path string, i int) (string, int) {
+	i++ // skip opening "
+	start := i
+	for i < len(path) {
+		if path[i] == '\\' && i+1 < len(path) {
+			i += 2 // skip escape sequence
+			continue
+		}
+		if path[i] == '"' {
+			return parserProcessBasicEscapes(path[start:i]), i + 1
+		}
+		i++
+	}
+	// Unclosed quote — return what we have.
+	return parserProcessBasicEscapes(path[start:]), i
+}
+
+func parsePathLiteralString(path string, i int) (string, int) {
+	i++ // skip opening '
+	start := i
+	for i < len(path) {
+		if path[i] == '\'' {
+			return path[start:i], i + 1
+		}
+		i++
+	}
+	// Unclosed quote — return what we have.
+	return path[start:], i
+}
+
+func parsePathBareKey(path string, i int) (string, int) {
+	start := i
+	for i < len(path) && isBareKeyChar(rune(path[i])) {
+		i++
+	}
+	return path[start:i], i
 }
 
 func matchKeyParts(parts []KeyPart, segs []string) bool {

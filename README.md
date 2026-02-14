@@ -2,7 +2,7 @@
 
 > [!WARNING]
 >
-> This library is in development, may have bugs and is subject to change without notice!
+> This library is in development, is incomplete, almost certainly has bugs, and is subject to change without notice!
 
 A TOML library for Go that parses into a Concrete Syntax Tree (CST), preserving whitespace, comments, and formatting for lossless round-trip editing.
 
@@ -196,11 +196,14 @@ toml.NewTable("section")       // [section]\n
 toml.NewTable("a", "b")        // [a.b]\n
 ```
 
-Keys are automatically quoted when they contain characters that aren't valid in bare keys:
+Keys that aren't valid bare keys must be quoted using TOML syntax:
 
 ```go
-toml.NewKeyValue("has spaces", toml.NewString("val"))
+toml.NewKeyValue(`"has spaces"`, toml.NewString("val"))
 // "has spaces" = "val"
+
+toml.NewKeyValue(`site."google.com"`, toml.NewBool(true))
+// site."google.com" = true
 ```
 
 Append nodes to a document or table:
