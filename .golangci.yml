@@ -3,6 +3,10 @@ run:
 
 issues:
   exclude-dirs-use-default: true
+  exclude-rules:
+    - path: cmd/
+      linters:
+        - err113
 
 linters:
   enable:

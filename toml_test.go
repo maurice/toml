@@ -1,259 +1,676 @@
 package toml
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
 
-func TestParse(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   []byte
-		wantErr bool
-	}{
-		{
-			name:    "empty document",
-			input:   []byte(""),
-			wantErr: false,
-		},
-		{
-			name:    "simple key-value",
-			input:   []byte(`key = "value"`),
-			wantErr: false,
-		},
+func TestParse_EmptyDocument(t *testing.T) {
+	d, err := Parse([]byte(""))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Parse(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !tt.wantErr && got == nil {
-				t.Fatalf("Parse() returned nil document")
-			}
-			// basic round-trip equivalence (ignore trailing newline normalization)
-			if strings.TrimSpace(got.String()) != strings.TrimSpace(string(tt.input)) {
-				t.Fatalf("round-trip mismatch\nwant: %q\n got: %q", string(tt.input), got.String())
-			}
-		})
+	if len(d.Nodes) != 0 {
+		t.Fatalf("expected 0 nodes, got %d", len(d.Nodes))
 	}
 }
 
-func TestParse_PreservesTrailingComment(t *testing.T) {
-	input := "key = \"value\"  # tail comment"
-	d, err := Parse([]byte(input))
-	if err != nil {
-		t.Fatalf("Parse error: %v", err)
-	}
-	kvs := d.KeyValues()
-	if len(kvs) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(kvs))
-	}
-	kv := kvs[0]
-	// trailing raw string preserved
-	if !strings.HasPrefix(strings.TrimSpace(kv.Trailing), "# tail comment") {
-		t.Fatalf("trailing comment not preserved: %q", kv.Trailing)
-	}
-	// trailing trivia nodes expose a CommentNode followed by no newline
-	found := false
-	for _, n := range kv.TrailingNodes {
-		if n.Type() == NodeComment && strings.HasPrefix(n.Text(), "# tail comment") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("trailing CommentNode not found in TrailingNodes")
+func TestParse_NilInput(t *testing.T) {
+	_, err := Parse(nil)
+	if !errors.Is(err, ErrNilInput) {
+		t.Fatalf("expected ErrNilInput, got %v", err)
 	}
 }
 
-func TestParse_PreservesLeadingTrivia_Raw(t *testing.T) {
-	input := "\n# comment before\n\nkey = \"v\""
-	d, err := Parse([]byte(input))
+func TestParse_SimpleKeyValue(t *testing.T) {
+	d, err := Parse([]byte(`key = "value"`))
 	if err != nil {
-		t.Fatalf("Parse error: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
-	kvs := d.KeyValues()
-	if len(kvs) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(kvs))
+	if len(d.Nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(d.Nodes))
 	}
-	kv := kvs[0]
-	// raw leading preserved
-	if !strings.Contains(kv.Leading, "# comment before") {
-		t.Fatalf("leading comment not preserved: %q", kv.Leading)
+	kv, ok := d.Nodes[0].(*KeyValue)
+	if !ok {
+		t.Fatalf("expected *KeyValue, got %T", d.Nodes[0])
+	}
+	if kv.RawKey != "key" {
+		t.Fatalf("expected key 'key', got %q", kv.RawKey)
+	}
+	if kv.RawVal != `"value"` {
+		t.Fatalf("expected value '\"value\"', got %q", kv.RawVal)
+	}
+	if kv.Val.Type() != NodeString {
+		t.Fatalf("expected string value, got %v", kv.Val.Type())
 	}
 }
 
-func TestParse_PreservesLeadingTrivia_Nodes(t *testing.T) {
-	input := "\n# comment before\n\nkey = \"v\""
+func TestParse_PreservesWhitespaceAroundEquals(t *testing.T) {
+	d, err := Parse([]byte("key  =  42\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if kv.PreEq != "  " {
+		t.Fatalf("expected PreEq '  ', got %q", kv.PreEq)
+	}
+	if kv.PostEq != "  " {
+		t.Fatalf("expected PostEq '  ', got %q", kv.PostEq)
+	}
+}
+
+func TestParse_TrailingComment(t *testing.T) {
+	d, err := Parse([]byte("key = \"value\"  # tail comment\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if len(kv.TrailingTrivia) != 2 {
+		t.Fatalf("expected 2 trailing trivia nodes, got %d", len(kv.TrailingTrivia))
+	}
+	comment := kv.TrailingTrivia[1]
+	if comment.Type() != NodeComment {
+		t.Fatalf("expected comment node, got %v", comment.Type())
+	}
+	if !strings.Contains(comment.Text(), "tail comment") {
+		t.Fatalf("expected trailing comment text, got %q", comment.Text())
+	}
+}
+
+func TestParse_LeadingTrivia(t *testing.T) {
+	input := "# comment before\n\nkey = \"v\"\n"
 	d, err := Parse([]byte(input))
 	if err != nil {
-		t.Fatalf("Parse error: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
-	kvs := d.KeyValues()
-	if len(kvs) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(kvs))
+	kv := d.Nodes[0].(*KeyValue)
+	if len(kv.LeadingTrivia) == 0 {
+		t.Fatalf("expected leading trivia")
 	}
-	kv := kvs[0]
-	// parsed leading nodes include a CommentNode and WhitespaceNodes
 	hasComment := false
-	hasBlank := false
-	for _, n := range kv.LeadingNodes {
+	for _, n := range kv.LeadingTrivia {
 		if n.Type() == NodeComment {
 			hasComment = true
-		}
-		if n.Type() == NodeWhitespace && (strings.Contains(n.Text(), "\n\n") || strings.Contains(n.Text(), "\n")) {
-			hasBlank = true
-		}
-	}
-	if !hasComment || !hasBlank {
-		t.Fatalf("expected leading comment and whitespace nodes; got: %+v", kv.LeadingNodes)
-	}
-}
-
-func TestRoundTrip_PreservesFormatting(t *testing.T) {
-	input := "# top comment\nkey = \"v\"  # inline\n\nother = 1"
-	d, err := Parse([]byte(input))
-	if err != nil {
-		t.Fatalf("Parse error: %v", err)
-	}
-	out := d.String()
-	if strings.TrimSpace(out) != strings.TrimSpace(input) {
-		t.Fatalf("round-trip formatting changed\nwant:\n%q\nget:\n%q", input, out)
-	}
-}
-
-func TestCST_WalkAndFindTrivia(t *testing.T) {
-	input := "# top\nkey = 1  # tail\n"
-	d, err := Parse([]byte(input))
-	if err != nil {
-		t.Fatalf("Parse error: %v", err)
-	}
-
-	var comments []string
-	var whites []string
-	d.Walk(func(n Node) bool {
-		if n.Type() == NodeComment {
-			comments = append(comments, n.Text())
-		}
-		if n.Type() == NodeWhitespace {
-			whites = append(whites, n.Text())
-		}
-		return true
-	})
-
-	if len(comments) < 2 { // top comment + inline tail
-		t.Fatalf("expected at least 2 comments, got %d (%v)", len(comments), comments)
-	}
-	if len(whites) < 2 {
-		t.Fatalf("expected whitespace nodes, got %d (%v)", len(whites), whites)
-	}
-}
-
-func tokenKindHelper(t *testing.T, input string, want NodeType) {
-	t.Helper()
-	d, err := Parse([]byte(input))
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	kvs := d.KeyValues()
-	if len(kvs) != 1 {
-		t.Fatalf("expected 1 kv, got %d", len(kvs))
-	}
-	kv := kvs[0]
-	if kv.KeyTok == nil || kv.KeyTok.Type() != NodeIdentifier {
-		t.Fatalf("expected key token to be Identifier, got %v", kv.KeyTok)
-	}
-	if kv.ValueTok == nil {
-		t.Fatalf("expected value token, got nil")
-	}
-	if kv.ValueTok.Type() != want {
-		t.Fatalf("value kind mismatch for %q: want %v got %v", input, want, kv.ValueTok.Type())
-	}
-}
-
-func TestCST_TokenKinds_Values(t *testing.T) {
-	tokenKindHelper(t, `s = "hello"`, NodeString)
-	tokenKindHelper(t, `n = 42`, NodeNumber)
-	tokenKindHelper(t, `b = true`, NodeBoolean)
-	tokenKindHelper(t, `id = bareword`, NodeIdentifier)
-}
-
-func TestCST_TokenKinds_TableHeader(t *testing.T) {
-	input := "[section]"
-	d, err := Parse([]byte(input))
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	var found bool
-	for _, n := range d.Nodes {
-		if tnode, ok := n.(*TableNode); ok {
-			if tnode.HeaderTok == nil || tnode.HeaderTok.Type() != NodeIdentifier {
-				t.Fatalf("expected table header token to be Identifier, got %v", tnode.HeaderTok)
+			if !strings.Contains(n.Text(), "comment before") {
+				t.Fatalf("unexpected comment text: %q", n.Text())
 			}
-			found = true
 		}
 	}
-	if !found {
-		t.Fatalf("table node not found")
+	if !hasComment {
+		t.Fatalf("expected a comment in leading trivia")
 	}
 }
 
-func TestParse_TableHeaderPreserved(t *testing.T) {
+func TestRoundTrip_SimpleDocument(t *testing.T) {
+	input := "# top comment\nkey = \"v\"  # inline\n\nother = 1\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_TableWithEntries(t *testing.T) {
+	input := "[server]\nhost = \"localhost\"\nport = 8080\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_ArrayOfTables(t *testing.T) {
+	input := "[[products]]\nname = \"Widget\"\n\n[[products]]\nname = \"Gadget\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_InlineTable(t *testing.T) {
+	input := "point = {x = 1, y = 2}\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_Array(t *testing.T) {
+	input := "arr = [1, 2, 3]\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_MultilineArray(t *testing.T) {
+	input := "arr = [\n  1,\n  2,\n  3,\n]\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestRoundTrip_ComplexDocument(t *testing.T) {
+	input := `# This is a TOML config file
+
+title = "My App"
+
+[database]
+server = "192.168.1.1"
+ports = [8001, 8001, 8002]
+enabled = true
+
+[servers.alpha]
+ip = "10.0.0.1"
+dc = "eqdc10"
+
+[[products]]
+name = "Hammer"
+sku = 738594937
+
+[[products]]
+name = "Nail"
+sku = 284758393
+`
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant:\n%s\ngot:\n%s", input, got)
+	}
+}
+
+func TestParse_TableHeader(t *testing.T) {
 	input := "# before\n[server.settings]  # header comment\n"
 	d, err := Parse([]byte(input))
 	if err != nil {
-		t.Fatalf("Parse error: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
-	// find first TableNode
 	var found *TableNode
 	for _, n := range d.Nodes {
-		if tnode, ok := n.(*TableNode); ok {
-			found = tnode
+		if tn, ok := n.(*TableNode); ok {
+			found = tn
 			break
 		}
 	}
 	if found == nil {
-		t.Fatalf("expected TableNode, none found; nodes=%v", d.Nodes)
+		t.Fatalf("expected TableNode, none found")
 	}
-	if found.Header != "server.settings" {
-		t.Fatalf("unexpected header: %q", found.Header)
+	if found.RawHeader != "server.settings" {
+		t.Fatalf("unexpected header: %q", found.RawHeader)
 	}
-	if !strings.Contains(found.Leading, "# before") {
-		t.Fatalf("leading trivia not preserved: %q", found.Leading)
+	if len(found.HeaderParts) != 2 {
+		t.Fatalf("expected 2 header parts, got %d", len(found.HeaderParts))
 	}
-	if !strings.Contains(found.Trailing, "header comment") {
-		t.Fatalf("trailing trivia not preserved: %q", found.Trailing)
-	}
-	// round-trip
-	if strings.TrimSpace(d.String()) != strings.TrimSpace(input) {
-		t.Fatalf("round-trip changed\nwant:%q\nget:%q", input, d.String())
+	if found.HeaderParts[0].Unquoted != "server" || found.HeaderParts[1].Unquoted != "settings" {
+		t.Fatalf("unexpected header parts: %v", found.HeaderParts)
 	}
 }
 
-func TestParse_ArrayOfTablesHeaderPreserved(t *testing.T) {
+func TestParse_ArrayOfTablesHeader(t *testing.T) {
 	input := "[[products]]  # arr\nname = \"prod\"\n"
 	d, err := Parse([]byte(input))
 	if err != nil {
-		t.Fatalf("Parse error: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
 	var found *ArrayOfTables
 	for _, n := range d.Nodes {
-		if an, ok := n.(*ArrayOfTables); ok {
-			found = an
+		if a, ok := n.(*ArrayOfTables); ok {
+			found = a
 			break
 		}
 	}
 	if found == nil {
-		t.Fatalf("expected ArrayOfTables, none found; nodes=%v", d.Nodes)
+		t.Fatalf("expected ArrayOfTables, none found")
 	}
-	if found.Header != "products" {
-		t.Fatalf("unexpected array header: %q", found.Header)
+	if found.RawHeader != "products" {
+		t.Fatalf("unexpected header: %q", found.RawHeader)
 	}
-	if !strings.Contains(found.Trailing, "arr") {
-		t.Fatalf("trailing trivia not preserved: %q", found.Trailing)
+	if len(found.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(found.Entries))
 	}
 }
 
-/* next: design and add a Node interface, table nodes, arrays, and
-   higher-level query APIs (Get/Set/Delete) built on top of this CST */
+func TestParse_HierarchicalStructure(t *testing.T) {
+	input := "top = 1\n[section]\ninner = 2\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(d.Nodes) != 2 {
+		t.Fatalf("expected 2 top-level nodes, got %d", len(d.Nodes))
+	}
+	if _, ok := d.Nodes[0].(*KeyValue); !ok {
+		t.Fatalf("expected first node to be KeyValue, got %T", d.Nodes[0])
+	}
+	tbl, ok := d.Nodes[1].(*TableNode)
+	if !ok {
+		t.Fatalf("expected second node to be TableNode, got %T", d.Nodes[1])
+	}
+	if len(tbl.Entries) != 1 {
+		t.Fatalf("expected 1 entry in table, got %d", len(tbl.Entries))
+	}
+}
+
+func TestParse_DottedKey(t *testing.T) {
+	d, err := Parse([]byte("a.b.c = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if len(kv.KeyParts) != 3 {
+		t.Fatalf("expected 3 key parts, got %d", len(kv.KeyParts))
+	}
+	if kv.KeyParts[0].Unquoted != "a" || kv.KeyParts[1].Unquoted != "b" || kv.KeyParts[2].Unquoted != "c" {
+		t.Fatalf("unexpected key parts: %v", kv.KeyParts)
+	}
+}
+
+func TestParse_QuotedKey(t *testing.T) {
+	d, err := Parse([]byte(`"key with spaces" = 1` + "\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if len(kv.KeyParts) != 1 {
+		t.Fatalf("expected 1 key part, got %d", len(kv.KeyParts))
+	}
+	if kv.KeyParts[0].Unquoted != "key with spaces" {
+		t.Fatalf("expected unquoted key 'key with spaces', got %q", kv.KeyParts[0].Unquoted)
+	}
+	if !kv.KeyParts[0].IsQuoted {
+		t.Fatalf("expected key to be marked as quoted")
+	}
+}
+
+func TestParse_ValueTypes(t *testing.T) {
+	tests := []struct {
+		input string
+		want  NodeType
+	}{
+		{`s = "hello"`, NodeString},
+		{`n = 42`, NodeNumber},
+		{`f = 3.14`, NodeNumber},
+		{`b = true`, NodeBoolean},
+		{`d = 2024-01-15`, NodeDateTime},
+		{`t = 08:30:00`, NodeDateTime},
+		{`dt = 2024-01-15T08:30:00Z`, NodeDateTime},
+		{`a = [1, 2]`, NodeArray},
+		{`it = {x = 1}`, NodeInlineTable},
+	}
+	for _, tt := range tests {
+		d, err := Parse([]byte(tt.input))
+		if err != nil {
+			t.Fatalf("parse error for %q: %v", tt.input, err)
+		}
+		kv := d.Nodes[0].(*KeyValue)
+		if kv.Val.Type() != tt.want {
+			t.Fatalf("for %q: expected value type %v, got %v", tt.input, tt.want, kv.Val.Type())
+		}
+	}
+}
+
+func TestWalk_FindsAllNodeTypes(t *testing.T) {
+	input := "# top\nkey = 1  # tail\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	comments := 0
+	d.Walk(func(n Node) bool {
+		if n.Type() == NodeComment {
+			comments++
+		}
+		return true
+	})
+	if comments < 2 {
+		t.Fatalf("expected at least 2 comments, found %d", comments)
+	}
+}
+
+func TestParse_MultilineBasicString(t *testing.T) {
+	input := "s = \"\"\"\nhello\nworld\"\"\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if kv.Val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.Val.Type())
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestParse_InlineTableEntries(t *testing.T) {
+	input := "point = {x = 1, y = 2}\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	it, ok := kv.Val.(*InlineTableNode)
+	if !ok {
+		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+	}
+	if len(it.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	}
+}
+
+func TestParse_SpecialFloats(t *testing.T) {
+	for _, v := range []string{"inf", "+inf", "-inf", "nan", "+nan", "-nan"} {
+		input := "f = " + v + "\n"
+		d, err := Parse([]byte(input))
+		if err != nil {
+			t.Fatalf("parse error for %s: %v", v, err)
+		}
+		kv := d.Nodes[0].(*KeyValue)
+		if kv.Val.Type() != NodeNumber {
+			t.Fatalf("for %s: expected number, got %v", v, kv.Val.Type())
+		}
+	}
+}
+
+func TestParse_HexOctBin(t *testing.T) {
+	tests := []struct {
+		input string
+		val   string
+	}{
+		{"n = 0xDEADBEEF\n", "0xDEADBEEF"},
+		{"n = 0o755\n", "0o755"},
+		{"n = 0b11010110\n", "0b11010110"},
+	}
+	for _, tt := range tests {
+		d, err := Parse([]byte(tt.input))
+		if err != nil {
+			t.Fatalf("parse error for %q: %v", tt.input, err)
+		}
+		kv := d.Nodes[0].(*KeyValue)
+		if kv.Val.Type() != NodeNumber {
+			t.Fatalf("for %q: expected number, got %v", tt.input, kv.Val.Type())
+		}
+		if kv.Val.Text() != tt.val {
+			t.Fatalf("for %q: expected %q, got %q", tt.input, tt.val, kv.Val.Text())
+		}
+	}
+}
+
+// --- Validation tests: numbers ---
+
+func TestParse_RejectsLeadingZeros(t *testing.T) {
+	_, err := Parse([]byte("n = 012\n"))
+	if err == nil {
+		t.Fatal("expected error for leading zeros")
+	}
+}
+
+func TestParse_RejectsDoubleUnderscore(t *testing.T) {
+	_, err := Parse([]byte("n = 1__0\n"))
+	if err == nil {
+		t.Fatal("expected error for double underscore")
+	}
+}
+
+func TestParse_RejectsTrailingUnderscore(t *testing.T) {
+	_, err := Parse([]byte("n = 100_\n"))
+	if err == nil {
+		t.Fatal("expected error for trailing underscore")
+	}
+}
+
+func TestParse_RejectsMultipleDots(t *testing.T) {
+	_, err := Parse([]byte("f = 1.2.3\n"))
+	if err == nil {
+		t.Fatal("expected error for multiple dots in float")
+	}
+}
+
+func TestParse_RejectsUnderscoreByDot(t *testing.T) {
+	_, err := Parse([]byte("f = 1_.0\n"))
+	if err == nil {
+		t.Fatal("expected error for underscore adjacent to dot")
+	}
+}
+
+func TestParse_RejectsUnderscoreByExponent(t *testing.T) {
+	_, err := Parse([]byte("f = 1_e2\n"))
+	if err == nil {
+		t.Fatal("expected error for underscore adjacent to exponent")
+	}
+}
+
+// --- Validation tests: datetimes ---
+
+func TestParse_RejectsInvalidMonth(t *testing.T) {
+	_, err := Parse([]byte("d = 2024-13-01\n"))
+	if err == nil {
+		t.Fatal("expected error for invalid month")
+	}
+}
+
+func TestParse_RejectsInvalidDay(t *testing.T) {
+	_, err := Parse([]byte("d = 2024-02-30\n"))
+	if err == nil {
+		t.Fatal("expected error for Feb 30")
+	}
+}
+
+func TestParse_RejectsInvalidHour(t *testing.T) {
+	_, err := Parse([]byte("t = 25:00:00\n"))
+	if err == nil {
+		t.Fatal("expected error for hour > 23")
+	}
+}
+
+// --- Validation tests: strings ---
+
+func TestParse_RejectsInvalidEscape(t *testing.T) {
+	_, err := Parse([]byte("s = \"hello\\q\"\n"))
+	if err == nil {
+		t.Fatal("expected error for invalid escape \\q")
+	}
+}
+
+func TestParse_RejectsControlCharInString(t *testing.T) {
+	_, err := Parse([]byte("s = \"hello\x01world\"\n"))
+	if err == nil {
+		t.Fatal("expected error for control char in string")
+	}
+}
+
+// --- Validation tests: semantic ---
+
+func TestParse_RejectsDuplicateTable(t *testing.T) {
+	input := "[a]\nk = 1\n[a]\nk = 2\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for duplicate table")
+	}
+}
+
+func TestParse_RejectsDuplicateKey(t *testing.T) {
+	input := "name = \"Tom\"\nname = \"Pradyun\"\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for duplicate key")
+	}
+}
+
+func TestParse_RejectsDuplicateQuotedKey(t *testing.T) {
+	input := "spelling = \"favorite\"\n\"spelling\" = \"favourite\"\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for duplicate key (bare vs quoted)")
+	}
+}
+
+func TestParse_RejectsDottedKeyReopen(t *testing.T) {
+	input := "[product]\ntype.name = \"Nail\"\ntype = { edible = false }\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for overwriting dotted-key table with inline table")
+	}
+}
+
+func TestParse_RejectsInlineTableExtend(t *testing.T) {
+	input := "a = {b = 1}\n[a]\nc = 2\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for extending inline table")
+	}
+}
+
+func TestParse_RejectsScalarOverwrite(t *testing.T) {
+	input := "a.b.c = 1\na.b = 2\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for overwriting dotted-key table with scalar")
+	}
+}
+
+func TestParse_RejectsAOTOverwrite(t *testing.T) {
+	input := "[[parent.arr]]\n[parent]\narr = 2\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for overwriting array of tables with scalar")
+	}
+}
+
+// --- TOML 1.1 feature tests ---
+
+func TestParse_EscapeE(t *testing.T) {
+	input := "s = \"hello\\eworld\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if kv.Val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.Val.Type())
+	}
+	got := d.String()
+	if got != input {
+		t.Fatalf("round-trip failed\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
+func TestParse_HexEscape(t *testing.T) {
+	input := "s = \"caf\\xE9\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	if kv.Val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.Val.Type())
+	}
+}
+
+func TestParse_MultiLineInlineTable(t *testing.T) {
+	input := "point = {\n  x = 1,\n  y = 2,\n}\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	it, ok := kv.Val.(*InlineTableNode)
+	if !ok {
+		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+	}
+	if len(it.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	}
+}
+
+func TestParse_TrailingCommaInlineTable(t *testing.T) {
+	input := "point = {x = 1, y = 2,}\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Nodes[0].(*KeyValue)
+	it, ok := kv.Val.(*InlineTableNode)
+	if !ok {
+		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+	}
+	if len(it.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	}
+}
+
+func TestParse_DateTimeNoSeconds(t *testing.T) {
+	tests := []struct {
+		input string
+	}{
+		{"t = 07:32\n"},
+		{"dt = 1979-05-27T07:32Z\n"},
+		{"dt = 1979-05-27T07:32+00:00\n"},
+		{"dt = 1979-05-27T07:32\n"},
+	}
+	for _, tt := range tests {
+		d, err := Parse([]byte(tt.input))
+		if err != nil {
+			t.Fatalf("parse error for %q: %v", tt.input, err)
+		}
+		kv := d.Nodes[0].(*KeyValue)
+		if kv.Val.Type() != NodeDateTime {
+			t.Fatalf("for %q: expected datetime, got %v", tt.input, kv.Val.Type())
+		}
+	}
+}
+
+func TestParse_RejectsBareCarriageReturn(t *testing.T) {
+	// Bare \r (not followed by \n) in multi-line basic string
+	input := "s = \"\"\"\nhello\rworld\"\"\"\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for bare carriage return in multi-line basic string")
+	}
+}
+
+func TestParse_RejectsBareCarriageReturnLiteral(t *testing.T) {
+	// Bare \r (not followed by \n) in multi-line literal string
+	input := "s = '''\nhello\rworld'''\n"
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for bare carriage return in multi-line literal string")
+	}
+}
+
+func TestParse_AllowsCRLFInMultiLineString(t *testing.T) {
+	// \r\n is valid in multi-line strings
+	input := "s = \"\"\"\r\nhello\r\nworld\"\"\"\n"
+	_, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error for CRLF in multi-line string: %v", err)
+	}
+}

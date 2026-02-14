@@ -45,7 +45,7 @@ tasks:
       - build-encoder
       - build-decoder
     cmds:
-      - go tool toml-test test -decoder=.bin/decoder -encoder=.bin/encoder
+      - go tool toml-test test -toml 1.1 -decoder=.bin/decoder -encoder=.bin/encoder
 
   vet:
     desc: Run go vet

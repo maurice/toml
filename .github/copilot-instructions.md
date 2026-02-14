@@ -8,26 +8,36 @@ The main value-add this library provides compared to others is the ability to re
 
 ## Current status
 
-At this stage literally nothing exists and we are building it from scratch, meaning much of the above and below is effectively our TODO list.
+The library is in the early stages of development, with the basic structure and API still being designed and implemented. The core parsing and serialization logic is being developed, along with the in-memory representation of TOML documents.
 
 ## Design and implementation
 
-Therefore the API is very much up for discussion, however it should provide idiomatic functions to ergonomically query the in-memory document, as well as iterate/enumerate its various keys and values, including the ability to get the keys of top-level values as well as nested or deeply nested values.
+Thus the API is very much up for discussion and change, however it should provide idiomatic functions to ergonomically query the in-memory document, as well as iterate/enumerate its various keys and values, including the ability to get the keys of top-level values as well as nested or deeply nested values.
 
-Likewise it should be possible to easily set and delete content from the document, including whitespace and comments.
+Likewise it should be possible to easily set, delete, insert and append content in the document, including whitespace and comments.
 
-When new content is added we will need to use heuristics to guess whitespace conventions when the document is written to disk.
+When new content is added we may need to use heuristics to guess whitespace conventions when the document is written to disk.
 
 - should there be a blank-line before a new table section
 - should there be whitespace between the various tokens in an inline table
 
-Additionally it should be possible for the user to set the whitespace rule for new and/or all content when writing the document.
+Additionally it should be possible for the user to set the whitespace rules for new and/or all content when writing the document, so the document is consistently formatted.
 
 It should be possible to format to bytes and/or work with Go's VFS abstraction.
 
+## Usage
+
+The library should be easy to use, with a simple API for reading, manipulating, and writing TOML documents.
+
+The README should provide clear examples of how to use the library for common tasks, such as reading a TOML file into memory, updating values, and writing the updated document back to disk.
+
+When reporting invalid TOML errors, the library should provide as much context as possible about the error, including the line and column number where the error occurred, and a helpful message describing the nature of the error.
+
 ## Testing
 
-To ensure spec compliance we should use the existing https://github.com/toml-lang/toml-test tool, which provides a large suite of test cases for validating TOML parsers and serializers. We should also add our own test cases to cover our whitespace and comments preservation features work as intended, as well as any other specific APIs we have.
+To ensure spec compliance we are working through test compliance with the https://github.com/toml-lang/toml-test tool, which provides a large suite of test cases for validating TOML parsers and serializers.
+
+We will also need our own test cases to cover our whitespace and comments preservation features work as intended, as well as any other specific APIs we have.
 
 We will also eventually use Go's fuzz testing capabilities to generate random TOML documents and ensure our library can handle them without panicking or otherwise crashing.
 
@@ -46,6 +56,22 @@ The library source code should be well-documented, with clear examples of how to
 The README should provide an overview of the library, its features, and how to get started with it, including installation instructions and basic usage examples.
 
 We could also consider adding a more detailed documentation site hosted on GitHub pages if the library grows in complexity.
+
+## Go binary tools
+
+Many Go binary tools suggest installing via source `go install <tool>@latest`, but we prefer to add them as a Go tool (ie, `go get -tool xxx` then `go tool xxx`) since this is simpler for other developers (with fewer initial setup scripts), keeps versioning consistent, avoids polluting the global Go binary space.
+
+## Typical tasks
+
+We're using `Task` for all of the project tasks like build, test, lint, etc. This is a simple task runner that allows us to define tasks in a `Taskfile.yml` and run them with `task <task-name>`. This helps keep our development workflow consistent and easy to use.
+
+Use `task tasks` to see the available tasks and their descriptions or read the `Taskfile.yml`; it's quite short and easy to grok.
+
+Try to avoid using `go run`, `go test` or `go fmt` directly, and instead use the appropriate `task` commands, which will ensure that all the necessary setup and configuration is done for you.
+
+## Agentic development
+
+All changes made by agents should pass the various tasks in `Taskfile.yml` to ensure that the code is linted, tested, formatted, etc before being merged into the main branch. This helps maintain code quality and consistency across the project, and avoids a large number of lint or other issues after a prolonged period of agentic development.
 
 ## CI/CD
 
