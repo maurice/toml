@@ -106,13 +106,9 @@ func matchKeyParts(parts []KeyPart, segs []string) bool {
 func (d *Document) Get(path string) *KeyValue {
 	segs := parseDottedPath(path)
 
-	// Check top-level KVs for exact match.
-	for _, n := range d.Nodes {
-		if kv, ok := n.(*KeyValue); ok {
-			if matchKeyParts(kv.KeyParts, segs) {
-				return kv
-			}
-		}
+	// Check top-level KVs for exact match and prefix match into inline tables.
+	if kv := findInEntries(d.Nodes, segs); kv != nil {
+		return kv
 	}
 
 	// Try table prefixes from longest to shortest.
@@ -168,6 +164,39 @@ func findInEntries(entries []Node, segs []string) *KeyValue {
 			}
 		}
 	}
+	// Prefix match into inline tables.
+	for _, e := range entries {
+		if kv, ok := e.(*KeyValue); ok {
+			n := len(kv.KeyParts)
+			if n < len(segs) && matchKeyParts(kv.KeyParts, segs[:n]) {
+				if it, ok := kv.Val.(*InlineTableNode); ok {
+					if found := findInKVEntries(it.Entries, segs[n:]); found != nil {
+						return found
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func findInKVEntries(entries []*KeyValue, segs []string) *KeyValue {
+	for _, kv := range entries {
+		if matchKeyParts(kv.KeyParts, segs) {
+			return kv
+		}
+	}
+	// Prefix match into nested inline tables.
+	for _, kv := range entries {
+		n := len(kv.KeyParts)
+		if n < len(segs) && matchKeyParts(kv.KeyParts, segs[:n]) {
+			if it, ok := kv.Val.(*InlineTableNode); ok {
+				if found := findInKVEntries(it.Entries, segs[n:]); found != nil {
+					return found
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -195,12 +224,7 @@ func (a *ArrayOfTables) Get(key string) *KeyValue {
 // Returns nil if no matching key is found.
 func (n *InlineTableNode) Get(key string) *KeyValue {
 	segs := parseDottedPath(key)
-	for _, kv := range n.Entries {
-		if matchKeyParts(kv.KeyParts, segs) {
-			return kv
-		}
-	}
-	return nil
+	return findInKVEntries(n.Entries, segs)
 }
 
 // --- Value extraction methods ---

@@ -39,7 +39,7 @@ tasks:
     cmds:
       - go test -v -race -coverprofile=coverage.out .
 
-  harness:
+  benchmark:
     desc: Run toml-test
     deps:
       - build-encoder
@@ -70,7 +70,7 @@ tasks:
       - task: lint
       - task: vet
       - task: build-lib
-      - task: harness
+      - task: benchmark
 
   clean:
     desc: Clean build artifacts

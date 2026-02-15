@@ -20,6 +20,13 @@ func TestDocument_Get_TopLevel(t *testing.T) {
 	if kv.RawKey != "name" {
 		t.Fatalf("expected key 'name', got %q", kv.RawKey)
 	}
+	s, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if s.Value() != "Alice" {
+		t.Fatalf("expected 'Alice', got %q", s.Value())
+	}
 }
 
 func TestDocument_Get_DottedKey(t *testing.T) {
@@ -30,6 +37,17 @@ func TestDocument_Get_DottedKey(t *testing.T) {
 	kv := d.Get("a.b.c")
 	if kv == nil {
 		t.Fatal("expected to find key 'a.b.c'")
+	}
+	n, ok := kv.Val.(*NumberNode)
+	if !ok {
+		t.Fatalf("expected NumberNode, got %T", kv.Val)
+	}
+	v, err := n.Int()
+	if err != nil {
+		t.Fatalf("Int() error: %v", err)
+	}
+	if v != 42 {
+		t.Fatalf("expected 42, got %d", v)
 	}
 }
 
@@ -70,6 +88,13 @@ func TestDocument_Get_InAOT(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'items.name'")
 	}
+	s, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if s.Value() != "widget" {
+		t.Fatalf("expected 'widget', got %q", s.Value())
+	}
 }
 
 // --- Document.Table tests ---
@@ -96,6 +121,9 @@ func TestDocument_Table_DottedHeader(t *testing.T) {
 	tbl := d.Table("servers.alpha")
 	if tbl == nil {
 		t.Fatal("expected to find table 'servers.alpha'")
+	}
+	if tbl.RawHeader != "servers.alpha" {
+		t.Fatalf("expected header 'servers.alpha', got %q", tbl.RawHeader)
 	}
 }
 
@@ -154,6 +182,13 @@ func TestArrayOfTables_Get(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'name'")
 	}
+	s, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if s.Value() != "Widget" {
+		t.Fatalf("expected 'Widget', got %q", s.Value())
+	}
 }
 
 // --- InlineTableNode.Get tests ---
@@ -177,6 +212,42 @@ func TestInlineTableNode_Get(t *testing.T) {
 	}
 	if xkv.Val.Text() != "1" {
 		t.Fatalf("expected '1', got %q", xkv.Val.Text())
+	}
+}
+
+func TestInlineTableValue_Get(t *testing.T) {
+	d, err := Parse([]byte("point = {x = 1, y = 2}\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("point.y")
+	if kv == nil {
+		t.Fatal("expected to find key 'point.y'")
+	}
+	it, ok := kv.Val.(*NumberNode)
+	if !ok {
+		t.Fatalf("expected NumberNode, got %T", kv.Val)
+	}
+	if it.Text() != "2" {
+		t.Fatalf("expected '2', got %q", it.Text())
+	}
+}
+
+func TestInlineTableValue_Get_DeeplyNested(t *testing.T) {
+	d, err := Parse([]byte("address = { home = { street = \"123 Main St\" } }\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("address.home.street")
+	if kv == nil {
+		t.Fatal("expected to find key 'address.home.street'")
+	}
+	it, ok := kv.Val.(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", kv.Val)
+	}
+	if it.Value() != "123 Main St" {
+		t.Fatalf("expected '123 Main St', got %q", it.Value())
 	}
 }
 
