@@ -39,7 +39,7 @@ func main() {
 
 func documentToTaggedJSON(doc *toml.Document) map[string]any {
 	root := make(map[string]any)
-	for _, n := range doc.Nodes {
+	for _, n := range doc.Nodes() {
 		switch v := n.(type) {
 		case *toml.KeyValue:
 			setKeyValue(root, v)
@@ -53,13 +53,13 @@ func documentToTaggedJSON(doc *toml.Document) map[string]any {
 }
 
 func setKeyValue(tbl map[string]any, kv *toml.KeyValue) {
-	val := valueToTagged(kv.Val)
-	setNestedKey(tbl, kv.KeyParts, val)
+	val := valueToTagged(kv.Val())
+	setNestedKey(tbl, kv.KeyParts(), val)
 }
 
 func processTableNode(root map[string]any, v *toml.TableNode) {
-	tbl := resolveTablePath(root, v.HeaderParts)
-	for _, entry := range v.Entries {
+	tbl := resolveTablePath(root, v.HeaderParts())
+	for _, entry := range v.Entries() {
 		if kv, ok := entry.(*toml.KeyValue); ok {
 			setKeyValue(tbl, kv)
 		}
@@ -67,11 +67,12 @@ func processTableNode(root map[string]any, v *toml.TableNode) {
 }
 
 func processAOTNode(root map[string]any, v *toml.ArrayOfTables) {
-	parent := resolveTablePath(root, v.HeaderParts[:len(v.HeaderParts)-1])
-	lastKey := v.HeaderParts[len(v.HeaderParts)-1].Unquoted
+	parts := v.HeaderParts()
+	parent := resolveTablePath(root, parts[:len(parts)-1])
+	lastKey := parts[len(parts)-1].Unquoted
 	arr, _ := parent[lastKey].([]any)
 	entry := make(map[string]any)
-	for _, e := range v.Entries {
+	for _, e := range v.Entries() {
 		if kv, ok := e.(*toml.KeyValue); ok {
 			setKeyValue(entry, kv)
 		}
@@ -139,15 +140,15 @@ func valueToTagged(node toml.Node) any {
 	case *toml.DateTimeNode:
 		return datetimeToTagged(n.Text())
 	case *toml.ArrayNode:
-		result := make([]any, 0, len(n.Elements))
-		for _, elem := range n.Elements {
+		result := make([]any, 0, len(n.Elements()))
+		for _, elem := range n.Elements() {
 			result = append(result, valueToTagged(elem))
 		}
 		return result
 	case *toml.InlineTableNode:
 		result := make(map[string]any)
-		for _, kv := range n.Entries {
-			setNestedKey(result, kv.KeyParts, valueToTagged(kv.Val))
+		for _, kv := range n.Entries() {
+			setNestedKey(result, kv.KeyParts(), valueToTagged(kv.Val()))
 		}
 		return result
 	default:

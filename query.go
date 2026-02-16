@@ -107,7 +107,7 @@ func (d *Document) Get(path string) *KeyValue {
 	segs := parseDottedPath(path)
 
 	// Check top-level KVs for exact match and prefix match into inline tables.
-	if kv := findInEntries(d.Nodes, segs); kv != nil {
+	if kv := findInEntries(d.nodes, segs); kv != nil {
 		return kv
 	}
 
@@ -119,7 +119,7 @@ func (d *Document) getFromTables(segs []string) *KeyValue {
 	for prefixLen := len(segs) - 1; prefixLen >= 1; prefixLen-- {
 		tableSegs := segs[:prefixLen]
 		keySegs := segs[prefixLen:]
-		for _, n := range d.Nodes {
+		for _, n := range d.nodes {
 			if kv := getFromTableNode(n, tableSegs, keySegs); kv != nil {
 				return kv
 			}
@@ -131,12 +131,12 @@ func (d *Document) getFromTables(segs []string) *KeyValue {
 func getFromTableNode(n Node, tableSegs, keySegs []string) *KeyValue {
 	switch t := n.(type) {
 	case *TableNode:
-		if matchKeyParts(t.HeaderParts, tableSegs) {
-			return findInEntries(t.Entries, keySegs)
+		if matchKeyParts(t.headerParts, tableSegs) {
+			return findInEntries(t.entries, keySegs)
 		}
 	case *ArrayOfTables:
-		if matchKeyParts(t.HeaderParts, tableSegs) {
-			return findInEntries(t.Entries, keySegs)
+		if matchKeyParts(t.headerParts, tableSegs) {
+			return findInEntries(t.entries, keySegs)
 		}
 	}
 	return nil
@@ -146,9 +146,9 @@ func getFromTableNode(n Node, tableSegs, keySegs []string) *KeyValue {
 // Returns nil if no matching table is found.
 func (d *Document) Table(path string) *TableNode {
 	segs := parseDottedPath(path)
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		if t, ok := n.(*TableNode); ok {
-			if matchKeyParts(t.HeaderParts, segs) {
+			if matchKeyParts(t.headerParts, segs) {
 				return t
 			}
 		}
@@ -159,7 +159,7 @@ func (d *Document) Table(path string) *TableNode {
 func findInEntries(entries []Node, segs []string) *KeyValue {
 	for _, e := range entries {
 		if kv, ok := e.(*KeyValue); ok {
-			if matchKeyParts(kv.KeyParts, segs) {
+			if matchKeyParts(kv.keyParts, segs) {
 				return kv
 			}
 		}
@@ -167,10 +167,10 @@ func findInEntries(entries []Node, segs []string) *KeyValue {
 	// Prefix match into inline tables.
 	for _, e := range entries {
 		if kv, ok := e.(*KeyValue); ok {
-			n := len(kv.KeyParts)
-			if n < len(segs) && matchKeyParts(kv.KeyParts, segs[:n]) {
-				if it, ok := kv.Val.(*InlineTableNode); ok {
-					if found := findInKVEntries(it.Entries, segs[n:]); found != nil {
+			n := len(kv.keyParts)
+			if n < len(segs) && matchKeyParts(kv.keyParts, segs[:n]) {
+				if it, ok := kv.val.(*InlineTableNode); ok {
+					if found := findInKVEntries(it.entries, segs[n:]); found != nil {
 						return found
 					}
 				}
@@ -182,16 +182,16 @@ func findInEntries(entries []Node, segs []string) *KeyValue {
 
 func findInKVEntries(entries []*KeyValue, segs []string) *KeyValue {
 	for _, kv := range entries {
-		if matchKeyParts(kv.KeyParts, segs) {
+		if matchKeyParts(kv.keyParts, segs) {
 			return kv
 		}
 	}
 	// Prefix match into nested inline tables.
 	for _, kv := range entries {
-		n := len(kv.KeyParts)
-		if n < len(segs) && matchKeyParts(kv.KeyParts, segs[:n]) {
-			if it, ok := kv.Val.(*InlineTableNode); ok {
-				if found := findInKVEntries(it.Entries, segs[n:]); found != nil {
+		n := len(kv.keyParts)
+		if n < len(segs) && matchKeyParts(kv.keyParts, segs[:n]) {
+			if it, ok := kv.val.(*InlineTableNode); ok {
+				if found := findInKVEntries(it.entries, segs[n:]); found != nil {
 					return found
 				}
 			}
@@ -206,7 +206,7 @@ func findInKVEntries(entries []*KeyValue, segs []string) *KeyValue {
 // Returns nil if no matching key is found.
 func (t *TableNode) Get(key string) *KeyValue {
 	segs := parseDottedPath(key)
-	return findInEntries(t.Entries, segs)
+	return findInEntries(t.entries, segs)
 }
 
 // --- ArrayOfTables query methods ---
@@ -215,7 +215,7 @@ func (t *TableNode) Get(key string) *KeyValue {
 // Returns nil if no matching key is found.
 func (a *ArrayOfTables) Get(key string) *KeyValue {
 	segs := parseDottedPath(key)
-	return findInEntries(a.Entries, segs)
+	return findInEntries(a.entries, segs)
 }
 
 // --- InlineTableNode query methods ---
@@ -224,7 +224,7 @@ func (a *ArrayOfTables) Get(key string) *KeyValue {
 // Returns nil if no matching key is found.
 func (n *InlineTableNode) Get(key string) *KeyValue {
 	segs := parseDottedPath(key)
-	return findInKVEntries(n.Entries, segs)
+	return findInKVEntries(n.entries, segs)
 }
 
 // --- Value extraction methods ---

@@ -700,6 +700,13 @@ type docValidator struct {
 	state  *tableState
 }
 
+// Validate runs full structural validation on the document.
+// It checks for duplicate tables, duplicate keys, table/AOT conflicts,
+// dotted key conflicts, inline table extension, and static array extension.
+func (d *Document) Validate() error {
+	return validateDocument(d, d.String())
+}
+
 func validateDocument(doc *Document, source string) error {
 	v := &docValidator{
 		source: source,
@@ -709,7 +716,7 @@ func validateDocument(doc *Document, source string) error {
 }
 
 func (v *docValidator) validate(doc *Document) error {
-	for _, n := range doc.Nodes {
+	for _, n := range doc.nodes {
 		switch node := n.(type) {
 		case *KeyValue:
 			if err := v.checkKeyValue(nil, node); err != nil {
@@ -764,21 +771,21 @@ func buildFullPath(baseParts, keyParts []KeyPart) string {
 }
 
 func (v *docValidator) checkTable(node *TableNode) error {
-	path := keyPartsToPath(node.HeaderParts)
+	path := keyPartsToPath(node.headerParts)
 
 	if msg := v.checkTablePathConflicts(path); msg != "" {
 		return v.errorAt(msg, node.line, node.col)
 	}
-	if msg := v.checkIntermediatePaths(node.HeaderParts, path); msg != "" {
+	if msg := v.checkIntermediatePaths(node.headerParts, path); msg != "" {
 		return v.errorAt(msg, node.line, node.col)
 	}
 
 	v.state.explicitTables[path] = true
-	v.markParentImplicit(node.HeaderParts)
+	v.markParentImplicit(node.headerParts)
 
-	for _, entry := range node.Entries {
+	for _, entry := range node.entries {
 		if kv, ok := entry.(*KeyValue); ok {
-			if err := v.checkKeyValue(node.HeaderParts, kv); err != nil {
+			if err := v.checkKeyValue(node.headerParts, kv); err != nil {
 				return err
 			}
 		}
@@ -837,22 +844,22 @@ func (v *docValidator) markParentImplicit(parts []KeyPart) {
 }
 
 func (v *docValidator) checkAOT(node *ArrayOfTables) error {
-	path := keyPartsToPath(node.HeaderParts)
+	path := keyPartsToPath(node.headerParts)
 
 	if msg := v.checkAOTPathConflicts(path); msg != "" {
 		return v.errorAt(msg, node.line, node.col)
 	}
-	if msg := v.checkIntermediatePathsAOT(node.HeaderParts, path); msg != "" {
+	if msg := v.checkIntermediatePathsAOT(node.headerParts, path); msg != "" {
 		return v.errorAt(msg, node.line, node.col)
 	}
 
 	v.state.aotPaths[path] = true
-	v.markParentImplicit(node.HeaderParts)
+	v.markParentImplicit(node.headerParts)
 	v.clearSubScope(path)
 
-	for _, entry := range node.Entries {
+	for _, entry := range node.entries {
 		if kv, ok := entry.(*KeyValue); ok {
-			if err := v.checkKeyValue(node.HeaderParts, kv); err != nil {
+			if err := v.checkKeyValue(node.headerParts, kv); err != nil {
 				return err
 			}
 		}
@@ -920,25 +927,25 @@ func clearPrefix(m map[string]bool, prefix string) {
 func (v *docValidator) checkKeyValue(baseParts []KeyPart, kv *KeyValue) error {
 	ts := v.state
 
-	for i := 0; i < len(kv.KeyParts)-1; i++ {
-		intermediatePath := buildFullPath(baseParts, kv.KeyParts[:i+1])
+	for i := 0; i < len(kv.keyParts)-1; i++ {
+		intermediatePath := buildFullPath(baseParts, kv.keyParts[:i+1])
 		if msg := v.checkDottedIntermediate(intermediatePath); msg != "" {
 			return v.errorAt(msg, kv.line, kv.col)
 		}
 		ts.dottedKeyTables[intermediatePath] = true
 	}
 
-	leafPath := buildFullPath(baseParts, kv.KeyParts)
+	leafPath := buildFullPath(baseParts, kv.keyParts)
 
 	// Check for duplicate/conflicting key BEFORE marking the path.
 	if msg := v.checkLeafConflict(leafPath); msg != "" {
 		return v.errorAt(msg, kv.line, kv.col)
 	}
 
-	v.markLeafPath(leafPath, kv.Val)
+	v.markLeafPath(leafPath, kv.val)
 
 	// Check inline table entries for duplicate keys.
-	if it, ok := kv.Val.(*InlineTableNode); ok {
+	if it, ok := kv.val.(*InlineTableNode); ok {
 		if err := v.checkInlineTableKeys(leafPath, it, kv.line, kv.col); err != nil {
 			return err
 		}
@@ -981,16 +988,16 @@ func (v *docValidator) markInlinePaths(path string, val Node) {
 	v.state.inlinePaths[path] = true
 	switch n := val.(type) {
 	case *InlineTableNode:
-		for _, kv := range n.Entries {
-			subPath := path + "." + keyPartsToPath(kv.KeyParts)
-			v.markInlinePaths(subPath, kv.Val)
+		for _, kv := range n.entries {
+			subPath := path + "." + keyPartsToPath(kv.keyParts)
+			v.markInlinePaths(subPath, kv.val)
 		}
 	case *ArrayNode:
-		for _, elem := range n.Elements {
+		for _, elem := range n.elements {
 			if it, ok := elem.(*InlineTableNode); ok {
-				for _, kv := range it.Entries {
-					subPath := path + "." + keyPartsToPath(kv.KeyParts)
-					v.markInlinePaths(subPath, kv.Val)
+				for _, kv := range it.entries {
+					subPath := path + "." + keyPartsToPath(kv.keyParts)
+					v.markInlinePaths(subPath, kv.val)
 				}
 			}
 		}
@@ -1016,14 +1023,14 @@ func (v *docValidator) checkLeafConflict(path string) string {
 
 func (v *docValidator) checkInlineTableKeys(_ string, it *InlineTableNode, line, col int) error {
 	seen := make(map[string]bool)
-	for _, kv := range it.Entries {
-		fullKey := keyPartsToPath(kv.KeyParts)
+	for _, kv := range it.entries {
+		fullKey := keyPartsToPath(kv.keyParts)
 		if seen[fullKey] {
 			return v.errorAt(fmt.Sprintf("duplicate key %q in inline table", fullKey), line, col)
 		}
 		seen[fullKey] = true
-		for i := 1; i < len(kv.KeyParts); i++ {
-			prefix := keyPartsToPath(kv.KeyParts[:i])
+		for i := 1; i < len(kv.keyParts); i++ {
+			prefix := keyPartsToPath(kv.keyParts[:i])
 			if seen[prefix] {
 				return v.errorAt(fmt.Sprintf("key %q conflicts with dotted key in inline table", prefix), line, col)
 			}

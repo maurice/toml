@@ -11,9 +11,9 @@ func ExampleParse() {
 	if err != nil {
 		panic(err)
 	}
-	kv := doc.Nodes[0].(*toml.KeyValue)
-	fmt.Println(kv.RawKey)
-	fmt.Println(kv.Val.Type() == toml.NodeString)
+	kv := doc.Nodes()[0].(*toml.KeyValue)
+	fmt.Println(kv.RawKey())
+	fmt.Println(kv.Val().Type() == toml.NodeString)
 	// Output:
 	// name
 	// true
@@ -31,7 +31,7 @@ func ExampleDocument_String() {
 func ExampleDocument_Get() {
 	doc, _ := toml.Parse([]byte("[server]\nhost = \"localhost\"\nport = 8080\n"))
 	kv := doc.Get("server.host")
-	fmt.Println(kv.Val.(*toml.StringNode).Value())
+	fmt.Println(kv.Val().(*toml.StringNode).Value())
 	// Output:
 	// localhost
 }
@@ -39,7 +39,7 @@ func ExampleDocument_Get() {
 func ExampleDocument_Table() {
 	doc, _ := toml.Parse([]byte("[database]\nport = 5432\n"))
 	tbl := doc.Table("database")
-	fmt.Println(tbl.RawHeader)
+	fmt.Println(tbl.RawHeader())
 	// Output:
 	// database
 }
@@ -78,7 +78,13 @@ func ExampleDocument_DeleteTable() {
 
 func ExampleDocument_Append() {
 	doc, _ := toml.Parse([]byte("a = 1\n"))
-	doc.Append(toml.NewKeyValue("b", toml.NewInteger(2)))
+	kv, err := toml.NewKeyValue("b", toml.NewInteger(2))
+	if err != nil {
+		panic(err)
+	}
+	if err := doc.Append(kv); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// a = 1
@@ -87,7 +93,13 @@ func ExampleDocument_Append() {
 
 func ExampleDocument_InsertAt() {
 	doc, _ := toml.Parse([]byte("a = 1\nc = 3\n"))
-	doc.InsertAt(1, toml.NewKeyValue("b", toml.NewInteger(2)))
+	kv, err := toml.NewKeyValue("b", toml.NewInteger(2))
+	if err != nil {
+		panic(err)
+	}
+	if err := doc.InsertAt(1, kv); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// a = 1
@@ -99,7 +111,7 @@ func ExampleTableNode_Get() {
 	doc, _ := toml.Parse([]byte("[server]\nhost = \"localhost\"\nport = 8080\n"))
 	tbl := doc.Table("server")
 	kv := tbl.Get("port")
-	fmt.Println(kv.Val.Text())
+	fmt.Println(kv.Val().Text())
 	// Output:
 	// 8080
 }
@@ -107,7 +119,13 @@ func ExampleTableNode_Get() {
 func ExampleTableNode_Append() {
 	doc, _ := toml.Parse([]byte("[server]\nhost = \"localhost\"\n"))
 	tbl := doc.Table("server")
-	tbl.Append(toml.NewKeyValue("port", toml.NewInteger(8080)))
+	kv, err := toml.NewKeyValue("port", toml.NewInteger(8080))
+	if err != nil {
+		panic(err)
+	}
+	if err := tbl.Append(kv); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// [server]
@@ -118,7 +136,9 @@ func ExampleTableNode_Append() {
 func ExampleKeyValue_SetValue() {
 	doc, _ := toml.Parse([]byte("port = 80\n"))
 	kv := doc.Get("port")
-	kv.SetValue(toml.NewInteger(8080))
+	if err := kv.SetValue(toml.NewInteger(8080)); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// port = 8080
@@ -126,7 +146,7 @@ func ExampleKeyValue_SetValue() {
 
 func ExampleStringNode_Value() {
 	doc, _ := toml.Parse([]byte(`greeting = "hello\nworld"` + "\n"))
-	s := doc.Get("greeting").Val.(*toml.StringNode)
+	s := doc.Get("greeting").Val().(*toml.StringNode)
 	fmt.Println(s.Value())
 	// Output:
 	// hello
@@ -135,7 +155,7 @@ func ExampleStringNode_Value() {
 
 func ExampleNumberNode_Int() {
 	doc, _ := toml.Parse([]byte("count = 1_000\n"))
-	n := doc.Get("count").Val.(*toml.NumberNode)
+	n := doc.Get("count").Val().(*toml.NumberNode)
 	v, _ := n.Int()
 	fmt.Println(v)
 	// Output:
@@ -143,19 +163,35 @@ func ExampleNumberNode_Int() {
 }
 
 func ExampleNewKeyValue() {
-	kv := toml.NewKeyValue("name", toml.NewString("Alice"))
+	kv, err := toml.NewKeyValue("name", toml.NewString("Alice"))
+	if err != nil {
+		panic(err)
+	}
 	doc := &toml.Document{}
-	doc.Append(kv)
+	if err := doc.Append(kv); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// name = "Alice"
 }
 
 func ExampleNewTable() {
-	tbl := toml.NewTable("server")
-	tbl.Append(toml.NewKeyValue("host", toml.NewString("localhost")))
+	tbl, err := toml.NewTable("server")
+	if err != nil {
+		panic(err)
+	}
+	kv, err := toml.NewKeyValue("host", toml.NewString("localhost"))
+	if err != nil {
+		panic(err)
+	}
+	if err := tbl.Append(kv); err != nil {
+		panic(err)
+	}
 	doc := &toml.Document{}
-	doc.Append(tbl)
+	if err := doc.Append(tbl); err != nil {
+		panic(err)
+	}
 	fmt.Print(doc.String())
 	// Output:
 	// [server]

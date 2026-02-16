@@ -97,12 +97,15 @@ func TestNewBool_False(t *testing.T) {
 }
 
 func TestNewKeyValue(t *testing.T) {
-	kv := NewKeyValue("name", NewString("Alice"))
-	if kv.RawKey != "name" {
-		t.Fatalf("expected key 'name', got %q", kv.RawKey)
+	kv, err := NewKeyValue("name", NewString("Alice"))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
 	}
-	if kv.RawVal != `"Alice"` {
-		t.Fatalf("expected val '\"Alice\"', got %q", kv.RawVal)
+	if kv.rawKey != "name" {
+		t.Fatalf("expected key 'name', got %q", kv.rawKey)
+	}
+	if kv.rawVal != `"Alice"` {
+		t.Fatalf("expected val '\"Alice\"', got %q", kv.rawVal)
 	}
 	if kv.PreEq != " " || kv.PostEq != " " {
 		t.Fatalf("expected standard spacing around =")
@@ -113,32 +116,41 @@ func TestNewKeyValue(t *testing.T) {
 }
 
 func TestNewKeyValue_QuotedKey(t *testing.T) {
-	kv := NewKeyValue(`"key with spaces"`, NewString("val"))
-	if kv.KeyParts[0].Text != `"key with spaces"` {
-		t.Fatalf("expected quoted key, got %q", kv.KeyParts[0].Text)
+	kv, err := NewKeyValue(`"key with spaces"`, NewString("val"))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
 	}
-	if kv.KeyParts[0].Unquoted != "key with spaces" {
-		t.Fatalf("expected unquoted 'key with spaces', got %q", kv.KeyParts[0].Unquoted)
+	if kv.keyParts[0].Text != `"key with spaces"` {
+		t.Fatalf("expected quoted key, got %q", kv.keyParts[0].Text)
+	}
+	if kv.keyParts[0].Unquoted != "key with spaces" {
+		t.Fatalf("expected unquoted 'key with spaces', got %q", kv.keyParts[0].Unquoted)
 	}
 }
 
 func TestNewKeyValue_DottedKey(t *testing.T) {
-	kv := NewKeyValue("a.b", NewInteger(1))
-	if len(kv.KeyParts) != 2 {
-		t.Fatalf("expected 2 key parts, got %d", len(kv.KeyParts))
+	kv, err := NewKeyValue("a.b", NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
 	}
-	if kv.KeyParts[0].Unquoted != "a" || kv.KeyParts[1].Unquoted != "b" {
-		t.Fatalf("unexpected key parts: %v", kv.KeyParts)
+	if len(kv.keyParts) != 2 {
+		t.Fatalf("expected 2 key parts, got %d", len(kv.keyParts))
+	}
+	if kv.keyParts[0].Unquoted != "a" || kv.keyParts[1].Unquoted != "b" {
+		t.Fatalf("unexpected key parts: %v", kv.keyParts)
 	}
 }
 
 func TestNewTable(t *testing.T) {
-	tbl := NewTable("server", "settings")
-	if tbl.RawHeader != "server.settings" {
-		t.Fatalf("expected header 'server.settings', got %q", tbl.RawHeader)
+	tbl, err := NewTable("server.settings")
+	if err != nil {
+		t.Fatalf("NewTable: %v", err)
 	}
-	if len(tbl.HeaderParts) != 2 {
-		t.Fatalf("expected 2 header parts, got %d", len(tbl.HeaderParts))
+	if tbl.rawHeader != "server.settings" {
+		t.Fatalf("expected header 'server.settings', got %q", tbl.rawHeader)
+	}
+	if len(tbl.headerParts) != 2 {
+		t.Fatalf("expected 2 header parts, got %d", len(tbl.headerParts))
 	}
 	if tbl.Newline != "\n" {
 		t.Fatalf("expected newline, got %q", tbl.Newline)
@@ -146,12 +158,15 @@ func TestNewTable(t *testing.T) {
 }
 
 func TestNewTable_QuotedSegments(t *testing.T) {
-	tbl := NewTable("has spaces", "normal")
-	if tbl.HeaderParts[0].Text != `"has spaces"` {
-		t.Fatalf("expected quoted segment, got %q", tbl.HeaderParts[0].Text)
+	tbl, err := NewTable(`"has spaces".normal`)
+	if err != nil {
+		t.Fatalf("NewTable: %v", err)
 	}
-	if tbl.HeaderParts[0].Unquoted != "has spaces" {
-		t.Fatalf("expected unquoted 'has spaces', got %q", tbl.HeaderParts[0].Unquoted)
+	if tbl.headerParts[0].Text != `"has spaces"` {
+		t.Fatalf("expected quoted segment, got %q", tbl.headerParts[0].Text)
+	}
+	if tbl.headerParts[0].Unquoted != "has spaces" {
+		t.Fatalf("expected unquoted 'has spaces', got %q", tbl.headerParts[0].Unquoted)
 	}
 }
 
@@ -163,9 +178,11 @@ func TestSetValue(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	kv := d.Get("key")
-	kv.SetValue(NewString("new"))
-	if kv.RawVal != `"new"` {
-		t.Fatalf("expected '\"new\"', got %q", kv.RawVal)
+	if err := kv.SetValue(NewString("new")); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	}
+	if kv.rawVal != `"new"` {
+		t.Fatalf("expected '\"new\"', got %q", kv.rawVal)
 	}
 	got := d.String()
 	expected := "key = \"new\"\n"
@@ -180,7 +197,9 @@ func TestSetValue_ChangeType(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	kv := d.Get("key")
-	kv.SetValue(NewInteger(42))
+	if err := kv.SetValue(NewInteger(42)); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	}
 	got := d.String()
 	expected := "key = 42\n"
 	if got != expected {
@@ -306,7 +325,13 @@ func TestDocument_Append(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	d.Append(NewKeyValue("b", NewInteger(2)))
+	kv, err := NewKeyValue("b", NewInteger(2))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := d.Append(kv); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\nb = 2\n"
 	if got != expected {
@@ -319,9 +344,20 @@ func TestDocument_Append_Table(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	tbl := NewTable("server")
-	d.Append(tbl)
-	tbl.Append(NewKeyValue("host", NewString("localhost")))
+	tbl, err := NewTable("server")
+	if err != nil {
+		t.Fatalf("NewTable: %v", err)
+	}
+	if err := d.Append(tbl); err != nil {
+		t.Fatalf("Append table: %v", err)
+	}
+	kv, err := NewKeyValue("host", NewString("localhost"))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := tbl.Append(kv); err != nil {
+		t.Fatalf("Append kv: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\n[server]\nhost = \"localhost\"\n"
 	if got != expected {
@@ -335,7 +371,13 @@ func TestTableNode_Append(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	tbl := d.Table("server")
-	tbl.Append(NewKeyValue("port", NewInteger(8080)))
+	kv, err := NewKeyValue("port", NewInteger(8080))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := tbl.Append(kv); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
 	got := d.String()
 	expected := "[server]\nhost = \"localhost\"\nport = 8080\n"
 	if got != expected {
@@ -349,7 +391,13 @@ func TestArrayOfTables_Append(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	aots := d.ArraysOfTables()
-	aots[0].Append(NewKeyValue("price", NewInteger(10)))
+	kv, err := NewKeyValue("price", NewInteger(10))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := aots[0].Append(kv); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
 	got := d.String()
 	expected := "[[items]]\nname = \"widget\"\nprice = 10\n"
 	if got != expected {
@@ -364,7 +412,13 @@ func TestDocument_InsertAt_Beginning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	d.InsertAt(0, NewKeyValue("a", NewInteger(1)))
+	kv, err := NewKeyValue("a", NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := d.InsertAt(0, kv); err != nil {
+		t.Fatalf("InsertAt: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\nb = 2\nc = 3\n"
 	if got != expected {
@@ -377,7 +431,13 @@ func TestDocument_InsertAt_Middle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	d.InsertAt(1, NewKeyValue("b", NewInteger(2)))
+	kv, err := NewKeyValue("b", NewInteger(2))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := d.InsertAt(1, kv); err != nil {
+		t.Fatalf("InsertAt: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\nb = 2\nc = 3\n"
 	if got != expected {
@@ -390,7 +450,13 @@ func TestDocument_InsertAt_End(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	d.InsertAt(999, NewKeyValue("b", NewInteger(2)))
+	kv, err := NewKeyValue("b", NewInteger(2))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := d.InsertAt(999, kv); err != nil {
+		t.Fatalf("InsertAt: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\nb = 2\n"
 	if got != expected {
@@ -403,7 +469,13 @@ func TestDocument_InsertAt_Negative(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	d.InsertAt(-1, NewKeyValue("a", NewInteger(1)))
+	kv, err := NewKeyValue("a", NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := d.InsertAt(-1, kv); err != nil {
+		t.Fatalf("InsertAt: %v", err)
+	}
 	got := d.String()
 	expected := "a = 1\nb = 2\n"
 	if got != expected {
@@ -417,7 +489,13 @@ func TestTableNode_InsertAt(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	tbl := d.Table("server")
-	tbl.InsertAt(1, NewKeyValue("ip", NewString("127.0.0.1")))
+	kv, err := NewKeyValue("ip", NewString("127.0.0.1"))
+	if err != nil {
+		t.Fatalf("NewKeyValue: %v", err)
+	}
+	if err := tbl.InsertAt(1, kv); err != nil {
+		t.Fatalf("InsertAt: %v", err)
+	}
 	got := d.String()
 	expected := "[server]\nhost = \"localhost\"\nip = \"127.0.0.1\"\nport = 8080\n"
 	if got != expected {
@@ -460,5 +538,364 @@ func TestDocument_DeleteTable_QuotedHeader(t *testing.T) {
 	expected := "top = 1\n"
 	if got != expected {
 		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+// --- ArrayNode mutation tests ---
+
+func TestArrayNode_Append(t *testing.T) {
+	arr, err := NewArray(NewInteger(1), NewInteger(2))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Append(NewInteger(3)); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if arr.Text() != "[1, 2, 3]" {
+		t.Fatalf("expected '[1, 2, 3]', got %q", arr.Text())
+	}
+	elems := arr.Elements()
+	if len(elems) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(elems))
+	}
+}
+
+func TestArrayNode_Append_RejectsNil(t *testing.T) {
+	arr, err := NewArray(NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Append(nil); err == nil {
+		t.Fatal("expected error for nil element")
+	}
+}
+
+func TestArrayNode_Append_RejectsInvalidType(t *testing.T) {
+	arr, err := NewArray(NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Append(&CommentNode{}); err == nil {
+		t.Fatal("expected error for invalid value type")
+	}
+}
+
+func TestArrayNode_Delete(t *testing.T) {
+	arr, err := NewArray(NewInteger(1), NewInteger(2), NewInteger(3))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Delete(1); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if arr.Text() != "[1, 3]" {
+		t.Fatalf("expected '[1, 3]', got %q", arr.Text())
+	}
+	elems := arr.Elements()
+	if len(elems) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(elems))
+	}
+}
+
+func TestArrayNode_Delete_OutOfBounds(t *testing.T) {
+	arr, err := NewArray(NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Delete(5); err == nil {
+		t.Fatal("expected error for out of bounds index")
+	}
+	if err := arr.Delete(-1); err == nil {
+		t.Fatal("expected error for negative index")
+	}
+}
+
+func TestArrayNode_Delete_All(t *testing.T) {
+	arr, err := NewArray(NewInteger(1))
+	if err != nil {
+		t.Fatalf("NewArray: %v", err)
+	}
+	if err := arr.Delete(0); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if arr.Text() != "[]" {
+		t.Fatalf("expected '[]', got %q", arr.Text())
+	}
+}
+
+// --- InlineTableNode mutation tests ---
+
+func TestInlineTableNode_Append(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	it, err := NewInlineTable(kv1)
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	kv2, _ := NewKeyValue("b", NewInteger(2))
+	if err := it.Append(kv2); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if it.Text() != "{a = 1, b = 2}" {
+		t.Fatalf("expected '{a = 1, b = 2}', got %q", it.Text())
+	}
+}
+
+func TestInlineTableNode_Append_DuplicateKey(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	it, err := NewInlineTable(kv1)
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	kv2, _ := NewKeyValue("a", NewInteger(2))
+	if err := it.Append(kv2); err == nil {
+		t.Fatal("expected error for duplicate key")
+	}
+}
+
+func TestInlineTableNode_Append_NilEntry(t *testing.T) {
+	it, err := NewInlineTable()
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	if err := it.Append(nil); err == nil {
+		t.Fatal("expected error for nil entry")
+	}
+}
+
+func TestInlineTableNode_Delete(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	kv2, _ := NewKeyValue("b", NewInteger(2))
+	it, err := NewInlineTable(kv1, kv2)
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	if !it.Delete("a") {
+		t.Fatal("expected Delete to return true")
+	}
+	if it.Text() != "{b = 2}" {
+		t.Fatalf("expected '{b = 2}', got %q", it.Text())
+	}
+}
+
+func TestInlineTableNode_Delete_Nonexistent(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	it, err := NewInlineTable(kv1)
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	if it.Delete("missing") {
+		t.Fatal("expected Delete to return false")
+	}
+}
+
+func TestInlineTableNode_Delete_All(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	it, err := NewInlineTable(kv1)
+	if err != nil {
+		t.Fatalf("NewInlineTable: %v", err)
+	}
+	if !it.Delete("a") {
+		t.Fatal("expected Delete to return true")
+	}
+	if it.Text() != "{}" {
+		t.Fatalf("expected '{}', got %q", it.Text())
+	}
+}
+
+// --- SetValue ancestor text regeneration tests ---
+
+func TestSetValue_RegeneratesInlineTableText(t *testing.T) {
+	d, err := Parse([]byte("config = {port = 8080, host = \"localhost\"}\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("config")
+	it, ok := kv.Val().(*InlineTableNode)
+	if !ok {
+		t.Fatal("expected InlineTableNode")
+	}
+	// Change a value inside the inline table.
+	for _, entry := range it.Entries() {
+		if entry.RawKey() == "port" {
+			if err := entry.SetValue(NewInteger(9090)); err != nil {
+				t.Fatalf("SetValue: %v", err)
+			}
+			break
+		}
+	}
+	got := d.String()
+	if got != "config = {port = 9090, host = \"localhost\"}\n" {
+		t.Fatalf("unexpected result: %q", got)
+	}
+}
+
+// --- Validation error tests ---
+
+func TestNewKeyValue_RejectsEmptyKey(t *testing.T) {
+	_, err := NewKeyValue("", NewString("val"))
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+}
+
+func TestNewKeyValue_RejectsNilValue(t *testing.T) {
+	_, err := NewKeyValue("key", nil)
+	if err == nil {
+		t.Fatal("expected error for nil value")
+	}
+}
+
+func TestNewKeyValue_RejectsInvalidValueType(t *testing.T) {
+	_, err := NewKeyValue("key", &CommentNode{})
+	if err == nil {
+		t.Fatal("expected error for invalid value type")
+	}
+}
+
+func TestNewKeyValue_RejectsInvalidKey(t *testing.T) {
+	_, err := NewKeyValue("has spaces", NewString("val"))
+	if err == nil {
+		t.Fatal("expected error for invalid bare key with spaces")
+	}
+}
+
+func TestNewTable_RejectsEmptyKey(t *testing.T) {
+	_, err := NewTable("")
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+}
+
+func TestNewTable_RejectsInvalidKey(t *testing.T) {
+	_, err := NewTable("a..b")
+	if err == nil {
+		t.Fatal("expected error for key with empty segment")
+	}
+}
+
+func TestNewArrayOfTables_RejectsEmptyKey(t *testing.T) {
+	_, err := NewArrayOfTables("")
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+}
+
+func TestNewDateTime_RejectsInvalid(t *testing.T) {
+	_, err := NewDateTime("not-a-date")
+	if err == nil {
+		t.Fatal("expected error for invalid datetime")
+	}
+}
+
+func TestNewDateTime_AcceptsValid(t *testing.T) {
+	dt, err := NewDateTime("2024-01-15T10:30:00Z")
+	if err != nil {
+		t.Fatalf("NewDateTime: %v", err)
+	}
+	if dt.Text() != "2024-01-15T10:30:00Z" {
+		t.Fatalf("unexpected text: %q", dt.Text())
+	}
+}
+
+func TestNewArray_RejectsNilElement(t *testing.T) {
+	_, err := NewArray(NewInteger(1), nil, NewInteger(3))
+	if err == nil {
+		t.Fatal("expected error for nil element")
+	}
+}
+
+func TestNewInlineTable_RejectsDuplicateKeys(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	kv2, _ := NewKeyValue("a", NewInteger(2))
+	_, err := NewInlineTable(kv1, kv2)
+	if err == nil {
+		t.Fatal("expected error for duplicate keys")
+	}
+}
+
+func TestNewInlineTable_RejectsNilEntry(t *testing.T) {
+	kv1, _ := NewKeyValue("a", NewInteger(1))
+	_, err := NewInlineTable(kv1, nil)
+	if err == nil {
+		t.Fatal("expected error for nil entry")
+	}
+}
+
+func TestSetValue_RejectsNil(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetValue(nil); err == nil {
+		t.Fatal("expected error for nil value")
+	}
+}
+
+func TestSetValue_RejectsInvalidType(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetValue(&CommentNode{}); err == nil {
+		t.Fatal("expected error for invalid value type")
+	}
+}
+
+func TestDocument_Append_RejectsDuplicate(t *testing.T) {
+	d, err := Parse([]byte("a = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv, _ := NewKeyValue("a", NewInteger(2))
+	if err := d.Append(kv); err == nil {
+		t.Fatal("expected error for duplicate key")
+	}
+	// Verify rollback.
+	if len(d.Nodes()) != 1 {
+		t.Fatalf("expected 1 node after rollback, got %d", len(d.Nodes()))
+	}
+}
+
+func TestDocument_Append_RejectsDuplicateTable(t *testing.T) {
+	d, err := Parse([]byte("[server]\nhost = \"localhost\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	tbl, _ := NewTable("server")
+	if err := d.Append(tbl); err == nil {
+		t.Fatal("expected error for duplicate table")
+	}
+}
+
+func TestDocument_Append_RejectsNil(t *testing.T) {
+	d, err := Parse([]byte(""))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if err := d.Append(nil); err == nil {
+		t.Fatal("expected error for nil node")
+	}
+}
+
+func TestDocument_Append_RejectsInvalidType(t *testing.T) {
+	d, err := Parse([]byte(""))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if err := d.Append(&CommentNode{}); err == nil {
+		t.Fatal("expected error for invalid node type")
+	}
+}
+
+func TestTableNode_Append_RejectsDuplicate(t *testing.T) {
+	d, err := Parse([]byte("[server]\nhost = \"localhost\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	tbl := d.Table("server")
+	kv, _ := NewKeyValue("host", NewString("other"))
+	if err := tbl.Append(kv); err == nil {
+		t.Fatal("expected error for duplicate key")
+	}
+}
+
+func TestTableNode_Append_RejectsNil(t *testing.T) {
+	tbl, _ := NewTable("t")
+	if err := tbl.Append(nil); err == nil {
+		t.Fatal("expected error for nil key-value")
 	}
 }

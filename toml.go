@@ -8,7 +8,18 @@ import (
 
 // Sentinel errors.
 var (
-	ErrNilInput = errors.New("nil input")
+	ErrNilInput          = errors.New("nil input")
+	ErrEmptyKey          = errors.New("empty key")
+	ErrUnexpectedContent = errors.New("unexpected content after key")
+	ErrNilValue          = errors.New("nil value")
+	ErrInvalidValueType  = errors.New("invalid value type")
+	ErrNilNode           = errors.New("nil node")
+	ErrInvalidNodeType   = errors.New("invalid document node type")
+	ErrInvalidDateTime   = errors.New("invalid datetime")
+	ErrNilEntry          = errors.New("nil key-value")
+	ErrDuplicateKey      = errors.New("duplicate key")
+	ErrKeyConflict       = errors.New("key conflicts with dotted key")
+	ErrIndexOutOfRange   = errors.New("index out of range")
 )
 
 // ParseError represents a parsing error with location information.
@@ -26,8 +37,8 @@ func (e *ParseError) Error() string {
 	}
 	lineContent := lines[e.Line-1]
 	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf("parse error at line %d, column %d: %s\n", e.Line, e.Column, e.Message))
-	buf.WriteString(fmt.Sprintf("  %d | %s\n", e.Line, lineContent))
+	fmt.Fprintf(&buf, "parse error at line %d, column %d: %s\n", e.Line, e.Column, e.Message)
+	fmt.Fprintf(&buf, "  %d | %s\n", e.Line, lineContent)
 	buf.WriteString("    | ")
 	for i := 1; i < e.Column; i++ {
 		if i-1 < len(lineContent) && lineContent[i-1] == '\t' {
@@ -117,33 +128,55 @@ type KeyPart struct {
 type KeyValue struct {
 	baseNode
 	LeadingTrivia  []Node    // whitespace/comments before the key
-	KeyParts       []KeyPart // parsed segments of (possibly dotted) key
-	RawKey         string    // full raw key text as written (e.g. "a . b")
+	keyParts       []KeyPart // parsed segments of (possibly dotted) key
+	rawKey         string    // full raw key text as written (e.g. "a . b")
 	PreEq          string    // whitespace between key and =
 	PostEq         string    // whitespace between = and value
-	Val            Node      // typed value node
-	RawVal         string    // raw value text as written
+	val            Node      // typed value node
+	rawVal         string    // raw value text as written
 	TrailingTrivia []Node    // trailing comment/whitespace on same line
 	Newline        string    // the line-ending newline if present
 }
 
-func (k *KeyValue) Children() []Node {
+// KeyParts returns a copy of the parsed key segments.
+func (kv *KeyValue) KeyParts() []KeyPart {
+	return append([]KeyPart(nil), kv.keyParts...)
+}
+
+// RawKey returns the full raw key text as written.
+func (kv *KeyValue) RawKey() string {
+	return kv.rawKey
+}
+
+// Val returns the typed value node.
+func (kv *KeyValue) Val() Node {
+	return kv.val
+}
+
+// RawVal returns the raw value text as written.
+func (kv *KeyValue) RawVal() string {
+	return kv.rawVal
+}
+
+func (kv *KeyValue) Children() []Node {
 	var out []Node
-	out = append(out, k.LeadingTrivia...)
-	if k.Val != nil {
-		out = append(out, k.Val)
+	out = append(out, kv.LeadingTrivia...)
+	if kv.val != nil {
+		out = append(out, kv.val)
 	}
-	out = append(out, k.TrailingTrivia...)
+	out = append(out, kv.TrailingTrivia...)
 	return out
 }
 
-func (k *KeyValue) Text() string {
+func (kv *KeyValue) Text() string {
 	var b strings.Builder
-	b.WriteString(k.RawKey)
-	b.WriteString(k.PreEq)
+	b.WriteString(kv.rawKey)
+	b.WriteString(kv.PreEq)
 	b.WriteString("=")
-	b.WriteString(k.PostEq)
-	b.WriteString(k.RawVal)
+	b.WriteString(kv.PostEq)
+	if kv.val != nil {
+		b.WriteString(kv.val.Text())
+	}
 	return b.String()
 }
 
@@ -151,68 +184,108 @@ func (k *KeyValue) Text() string {
 type TableNode struct {
 	baseNode
 	LeadingTrivia  []Node
-	RawHeader      string // full raw header text between brackets
-	HeaderParts    []KeyPart
+	rawHeader      string // full raw header text between brackets
+	headerParts    []KeyPart
 	TrailingTrivia []Node // trivia after ] on the header line
 	Newline        string
-	Entries        []Node // child KeyValue nodes
+	entries        []Node // child KeyValue nodes
+}
+
+// RawHeader returns the full raw header text between brackets.
+func (t *TableNode) RawHeader() string {
+	return t.rawHeader
+}
+
+// HeaderParts returns a copy of the parsed header key segments.
+func (t *TableNode) HeaderParts() []KeyPart {
+	return append([]KeyPart(nil), t.headerParts...)
+}
+
+// Entries returns a copy of the child entry nodes.
+func (t *TableNode) Entries() []Node {
+	return append([]Node(nil), t.entries...)
 }
 
 func (t *TableNode) Children() []Node {
 	var out []Node
 	out = append(out, t.LeadingTrivia...)
-	out = append(out, t.Entries...)
+	out = append(out, t.entries...)
 	out = append(out, t.TrailingTrivia...)
 	return out
 }
 
 func (t *TableNode) Text() string {
-	return "[" + t.RawHeader + "]"
+	return "[" + t.rawHeader + "]"
 }
 
 // ArrayOfTables represents [[array.of.tables]] and holds child entries.
 type ArrayOfTables struct {
 	baseNode
 	LeadingTrivia  []Node
-	RawHeader      string
-	HeaderParts    []KeyPart
+	rawHeader      string
+	headerParts    []KeyPart
 	TrailingTrivia []Node
 	Newline        string
-	Entries        []Node
+	entries        []Node
+}
+
+// RawHeader returns the full raw header text between brackets.
+func (a *ArrayOfTables) RawHeader() string {
+	return a.rawHeader
+}
+
+// HeaderParts returns a copy of the parsed header key segments.
+func (a *ArrayOfTables) HeaderParts() []KeyPart {
+	return append([]KeyPart(nil), a.headerParts...)
+}
+
+// Entries returns a copy of the child entry nodes.
+func (a *ArrayOfTables) Entries() []Node {
+	return append([]Node(nil), a.entries...)
 }
 
 func (a *ArrayOfTables) Children() []Node {
 	var out []Node
 	out = append(out, a.LeadingTrivia...)
-	out = append(out, a.Entries...)
+	out = append(out, a.entries...)
 	out = append(out, a.TrailingTrivia...)
 	return out
 }
 
 func (a *ArrayOfTables) Text() string {
-	return "[[" + a.RawHeader + "]]"
+	return "[[" + a.rawHeader + "]]"
 }
 
 // ArrayNode represents [val1, val2, ...].
 type ArrayNode struct {
 	baseNode
-	Elements []Node
+	elements []Node
 	text     string // raw source text
 }
 
-func (a *ArrayNode) Children() []Node { return append([]Node(nil), a.Elements...) }
+// Elements returns a copy of the array element nodes.
+func (a *ArrayNode) Elements() []Node {
+	return append([]Node(nil), a.elements...)
+}
+
+func (a *ArrayNode) Children() []Node { return append([]Node(nil), a.elements...) }
 func (a *ArrayNode) Text() string     { return a.text }
 
 // InlineTableNode represents { key = val, ... }.
 type InlineTableNode struct {
 	baseNode
-	Entries []*KeyValue
+	entries []*KeyValue
 	text    string
 }
 
+// Entries returns a copy of the inline table entries.
+func (n *InlineTableNode) Entries() []*KeyValue {
+	return append([]*KeyValue(nil), n.entries...)
+}
+
 func (n *InlineTableNode) Children() []Node {
-	out := make([]Node, 0, len(n.Entries))
-	for _, e := range n.Entries {
+	out := make([]Node, 0, len(n.entries))
+	for _, e := range n.entries {
 		out = append(out, e)
 	}
 	return out
@@ -222,12 +295,17 @@ func (n *InlineTableNode) Text() string { return n.text }
 
 // Document represents a parsed TOML document.
 type Document struct {
-	Nodes []Node // top-level nodes: KeyValue, TableNode, ArrayOfTables
+	nodes []Node // top-level nodes: KeyValue, TableNode, ArrayOfTables
+}
+
+// Nodes returns a copy of the top-level nodes.
+func (d *Document) Nodes() []Node {
+	return append([]Node(nil), d.nodes...)
 }
 
 func (d *Document) Type() NodeType   { return NodeDocument }
 func (d *Document) Parent() Node     { return nil }
-func (d *Document) Children() []Node { return append([]Node(nil), d.Nodes...) }
+func (d *Document) Children() []Node { return append([]Node(nil), d.nodes...) }
 func (d *Document) Text() string     { return d.String() }
 
 // Walk traverses the CST in pre-order. Visitor returns false to stop.
@@ -250,7 +328,7 @@ func (d *Document) Walk(visitor func(Node) bool) {
 // Tables returns all TableNode nodes in document order.
 func (d *Document) Tables() []*TableNode {
 	var out []*TableNode
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		if t, ok := n.(*TableNode); ok {
 			out = append(out, t)
 		}
@@ -261,7 +339,7 @@ func (d *Document) Tables() []*TableNode {
 // ArraysOfTables returns all ArrayOfTables nodes in document order.
 func (d *Document) ArraysOfTables() []*ArrayOfTables {
 	var out []*ArrayOfTables
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		if a, ok := n.(*ArrayOfTables); ok {
 			out = append(out, a)
 		}
@@ -272,7 +350,7 @@ func (d *Document) ArraysOfTables() []*ArrayOfTables {
 // String renders the document back to source, preserving formatting.
 func (d *Document) String() string {
 	var b strings.Builder
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		serializeNode(&b, n)
 	}
 	return b.String()
@@ -299,11 +377,13 @@ func serializeTrivia(b *strings.Builder, nodes []Node) {
 
 func serializeKeyValue(b *strings.Builder, kv *KeyValue) {
 	serializeTrivia(b, kv.LeadingTrivia)
-	b.WriteString(kv.RawKey)
+	b.WriteString(kv.rawKey)
 	b.WriteString(kv.PreEq)
 	b.WriteString("=")
 	b.WriteString(kv.PostEq)
-	b.WriteString(kv.RawVal)
+	if kv.val != nil {
+		b.WriteString(kv.val.Text())
+	}
 	serializeTrivia(b, kv.TrailingTrivia)
 	b.WriteString(kv.Newline)
 }
@@ -311,11 +391,11 @@ func serializeKeyValue(b *strings.Builder, kv *KeyValue) {
 func serializeTableNode(b *strings.Builder, t *TableNode) {
 	serializeTrivia(b, t.LeadingTrivia)
 	b.WriteString("[")
-	b.WriteString(t.RawHeader)
+	b.WriteString(t.rawHeader)
 	b.WriteString("]")
 	serializeTrivia(b, t.TrailingTrivia)
 	b.WriteString(t.Newline)
-	for _, entry := range t.Entries {
+	for _, entry := range t.entries {
 		serializeNode(b, entry)
 	}
 }
@@ -323,11 +403,11 @@ func serializeTableNode(b *strings.Builder, t *TableNode) {
 func serializeArrayOfTables(b *strings.Builder, a *ArrayOfTables) {
 	serializeTrivia(b, a.LeadingTrivia)
 	b.WriteString("[[")
-	b.WriteString(a.RawHeader)
+	b.WriteString(a.rawHeader)
 	b.WriteString("]]")
 	serializeTrivia(b, a.TrailingTrivia)
 	b.WriteString(a.Newline)
-	for _, entry := range a.Entries {
+	for _, entry := range a.entries {
 		serializeNode(b, entry)
 	}
 }

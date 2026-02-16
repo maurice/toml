@@ -154,7 +154,9 @@ b := kv.Val.(*toml.BooleanNode).Value() // bool
 
 ### Walking the tree
 
-`Document.Walk` traverses the entire CST in pre-order. Return `false` from the visitor to stop traversal:
+`Document.Walk` traverses the entire CST in pre-order — each node is visited before its children, and children are visited left-to-right. For a table like `[server]` containing `host = "localhost"`, the visitor sees: `Document` → `TableNode` → `KeyValue` → key node → value node.
+
+Return `false` from the visitor to stop traversal entirely:
 
 ```go
 doc.Walk(func(n toml.Node) bool {

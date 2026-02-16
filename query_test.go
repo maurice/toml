@@ -17,12 +17,12 @@ func TestDocument_Get_TopLevel(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'name'")
 	}
-	if kv.RawKey != "name" {
-		t.Fatalf("expected key 'name', got %q", kv.RawKey)
+	if kv.rawKey != "name" {
+		t.Fatalf("expected key 'name', got %q", kv.rawKey)
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "Alice" {
 		t.Fatalf("expected 'Alice', got %q", s.Value())
@@ -38,9 +38,9 @@ func TestDocument_Get_DottedKey(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'a.b.c'")
 	}
-	n, ok := kv.Val.(*NumberNode)
+	n, ok := kv.val.(*NumberNode)
 	if !ok {
-		t.Fatalf("expected NumberNode, got %T", kv.Val)
+		t.Fatalf("expected NumberNode, got %T", kv.val)
 	}
 	v, err := n.Int()
 	if err != nil {
@@ -60,9 +60,9 @@ func TestDocument_Get_InTable(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'server.host'")
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "localhost" {
 		t.Fatalf("expected 'localhost', got %q", s.Value())
@@ -88,9 +88,9 @@ func TestDocument_Get_InAOT(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'items.name'")
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "widget" {
 		t.Fatalf("expected 'widget', got %q", s.Value())
@@ -108,8 +108,8 @@ func TestDocument_Table(t *testing.T) {
 	if tbl == nil {
 		t.Fatal("expected to find table 'database'")
 	}
-	if tbl.RawHeader != "database" {
-		t.Fatalf("expected header 'database', got %q", tbl.RawHeader)
+	if tbl.rawHeader != "database" {
+		t.Fatalf("expected header 'database', got %q", tbl.rawHeader)
 	}
 }
 
@@ -122,8 +122,8 @@ func TestDocument_Table_DottedHeader(t *testing.T) {
 	if tbl == nil {
 		t.Fatal("expected to find table 'servers.alpha'")
 	}
-	if tbl.RawHeader != "servers.alpha" {
-		t.Fatalf("expected header 'servers.alpha', got %q", tbl.RawHeader)
+	if tbl.rawHeader != "servers.alpha" {
+		t.Fatalf("expected header 'servers.alpha', got %q", tbl.rawHeader)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestTableNode_Get(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'port'")
 	}
-	if kv.Val.Text() != "8080" {
-		t.Fatalf("expected '8080', got %q", kv.Val.Text())
+	if kv.val.Text() != "8080" {
+		t.Fatalf("expected '8080', got %q", kv.val.Text())
 	}
 }
 
@@ -182,9 +182,9 @@ func TestArrayOfTables_Get(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'name'")
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "Widget" {
 		t.Fatalf("expected 'Widget', got %q", s.Value())
@@ -202,16 +202,16 @@ func TestInlineTableNode_Get(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'point'")
 	}
-	it, ok := kv.Val.(*InlineTableNode)
+	it, ok := kv.val.(*InlineTableNode)
 	if !ok {
-		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+		t.Fatalf("expected InlineTableNode, got %T", kv.val)
 	}
 	xkv := it.Get("x")
 	if xkv == nil {
 		t.Fatal("expected to find key 'x' in inline table")
 	}
-	if xkv.Val.Text() != "1" {
-		t.Fatalf("expected '1', got %q", xkv.Val.Text())
+	if xkv.val.Text() != "1" {
+		t.Fatalf("expected '1', got %q", xkv.val.Text())
 	}
 }
 
@@ -224,9 +224,9 @@ func TestInlineTableValue_Get(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'point.y'")
 	}
-	it, ok := kv.Val.(*NumberNode)
+	it, ok := kv.val.(*NumberNode)
 	if !ok {
-		t.Fatalf("expected NumberNode, got %T", kv.Val)
+		t.Fatalf("expected NumberNode, got %T", kv.val)
 	}
 	if it.Text() != "2" {
 		t.Fatalf("expected '2', got %q", it.Text())
@@ -242,9 +242,9 @@ func TestInlineTableValue_Get_DeeplyNested(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key 'address.home.street'")
 	}
-	it, ok := kv.Val.(*StringNode)
+	it, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if it.Value() != "123 Main St" {
 		t.Fatalf("expected '123 Main St', got %q", it.Value())
@@ -258,7 +258,7 @@ func TestStringNode_Value_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "hello world" {
 		t.Fatalf("expected 'hello world', got %q", s.Value())
 	}
@@ -269,7 +269,7 @@ func TestStringNode_Value_Escapes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "hello\nworld" {
 		t.Fatalf("expected 'hello\\nworld', got %q", s.Value())
 	}
@@ -280,7 +280,7 @@ func TestStringNode_Value_Unicode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "caf\u00E9" {
 		t.Fatalf("expected 'caf\\u00E9', got %q", s.Value())
 	}
@@ -291,7 +291,7 @@ func TestStringNode_Value_Literal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != `C:\path\to\file` {
 		t.Fatalf("expected 'C:\\path\\to\\file', got %q", s.Value())
 	}
@@ -302,7 +302,7 @@ func TestStringNode_Value_MultiLineBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "hello\nworld" {
 		t.Fatalf("expected 'hello\\nworld', got %q", s.Value())
 	}
@@ -313,7 +313,7 @@ func TestStringNode_Value_MultiLineLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "hello\nworld" {
 		t.Fatalf("expected 'hello\\nworld', got %q", s.Value())
 	}
@@ -324,7 +324,7 @@ func TestStringNode_Value_MultiLineBackslash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "hello world" {
 		t.Fatalf("expected 'hello world', got %q", s.Value())
 	}
@@ -335,7 +335,7 @@ func TestStringNode_Value_HexEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	s := d.Get("s").Val.(*StringNode)
+	s := d.Get("s").val.(*StringNode)
 	if s.Value() != "caf\u00E9" {
 		t.Fatalf("expected 'caf\\u00E9', got %q", s.Value())
 	}
@@ -348,7 +348,7 @@ func TestNumberNode_Int_Decimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -363,7 +363,7 @@ func TestNumberNode_Int_Negative(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -378,7 +378,7 @@ func TestNumberNode_Int_Hex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -393,7 +393,7 @@ func TestNumberNode_Int_Octal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -408,7 +408,7 @@ func TestNumberNode_Int_Binary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -423,7 +423,7 @@ func TestNumberNode_Int_Underscore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Int()
 	if err != nil {
 		t.Fatalf("Int() error: %v", err)
@@ -438,7 +438,7 @@ func TestNumberNode_Int_ErrorOnFloat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	_, err = n.Int()
 	if err == nil {
 		t.Fatal("expected error for Int() on float")
@@ -452,7 +452,7 @@ func TestNumberNode_Float_Simple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -467,7 +467,7 @@ func TestNumberNode_Float_FromInteger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -482,7 +482,7 @@ func TestNumberNode_Float_Inf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -497,7 +497,7 @@ func TestNumberNode_Float_NegInf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -512,7 +512,7 @@ func TestNumberNode_Float_NaN(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -527,7 +527,7 @@ func TestNumberNode_Float_Exponent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	n := d.Get("n").Val.(*NumberNode)
+	n := d.Get("n").val.(*NumberNode)
 	v, err := n.Float()
 	if err != nil {
 		t.Fatalf("Float() error: %v", err)
@@ -544,7 +544,7 @@ func TestBooleanNode_Value_True(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	b := d.Get("b").Val.(*BooleanNode)
+	b := d.Get("b").val.(*BooleanNode)
 	if !b.Value() {
 		t.Fatal("expected true")
 	}
@@ -555,7 +555,7 @@ func TestBooleanNode_Value_False(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	b := d.Get("b").Val.(*BooleanNode)
+	b := d.Get("b").val.(*BooleanNode)
 	if b.Value() {
 		t.Fatal("expected false")
 	}
@@ -640,9 +640,9 @@ func TestDocument_Get_QuotedDottedKey(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key site.\"google.com\"")
 	}
-	b, ok := kv.Val.(*BooleanNode)
+	b, ok := kv.val.(*BooleanNode)
 	if !ok {
-		t.Fatalf("expected BooleanNode, got %T", kv.Val)
+		t.Fatalf("expected BooleanNode, got %T", kv.val)
 	}
 	if !b.Value() {
 		t.Fatal("expected true")
@@ -652,9 +652,9 @@ func TestDocument_Get_QuotedDottedKey(t *testing.T) {
 	if kv2 == nil {
 		t.Fatal("expected to find key physical.color")
 	}
-	s, ok := kv2.Val.(*StringNode)
+	s, ok := kv2.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv2.Val)
+		t.Fatalf("expected StringNode, got %T", kv2.val)
 	}
 	if s.Value() != "orange" {
 		t.Fatalf("expected 'orange', got %q", s.Value())
@@ -677,9 +677,9 @@ func TestDocument_Table_QuotedHeader(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key type.name in table")
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "pug" {
 		t.Fatalf("expected 'pug', got %q", s.Value())
@@ -697,9 +697,9 @@ func TestDocument_Get_ThroughQuotedTable(t *testing.T) {
 	if kv == nil {
 		t.Fatal("expected to find key dog.\"tater.man\".type.name")
 	}
-	s, ok := kv.Val.(*StringNode)
+	s, ok := kv.val.(*StringNode)
 	if !ok {
-		t.Fatalf("expected StringNode, got %T", kv.Val)
+		t.Fatalf("expected StringNode, got %T", kv.val)
 	}
 	if s.Value() != "pug" {
 		t.Fatalf("expected 'pug', got %q", s.Value())

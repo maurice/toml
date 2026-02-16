@@ -73,7 +73,8 @@ func (p *parser) parse() (*Document, error) {
 			if err != nil {
 				return nil, err
 			}
-			doc.Nodes = append(doc.Nodes, node)
+			doc.nodes = append(doc.nodes, node)
+			setNodeParent(node, doc)
 			if t, ok := node.(tableTarget); ok {
 				ct = t
 			}
@@ -89,11 +90,10 @@ func (p *parser) parse() (*Document, error) {
 		}
 
 		if ct != nil {
-			kv.setParent(nil) // parent will be the table
 			ct.addEntry(kv)
 		} else {
 			kv.setParent(doc)
-			doc.Nodes = append(doc.Nodes, kv)
+			doc.nodes = append(doc.nodes, kv)
 		}
 	}
 
@@ -101,8 +101,18 @@ func (p *parser) parse() (*Document, error) {
 }
 
 // addEntry methods for table types.
-func (t *TableNode) addEntry(n Node)     { t.Entries = append(t.Entries, n) }
-func (a *ArrayOfTables) addEntry(n Node) { a.Entries = append(a.Entries, n) }
+func (t *TableNode) addEntry(n Node) {
+	t.entries = append(t.entries, n)
+	if v, ok := n.(interface{ setParent(Node) }); ok {
+		v.setParent(t)
+	}
+}
+func (a *ArrayOfTables) addEntry(n Node) {
+	a.entries = append(a.entries, n)
+	if v, ok := n.(interface{ setParent(Node) }); ok {
+		v.setParent(a)
+	}
+}
 
 func (p *parser) attachOrphanTrivia(doc *Document, ct tableTarget, trivia []Node) {
 	if len(trivia) == 0 {
@@ -115,24 +125,24 @@ func (p *parser) attachOrphanTrivia(doc *Document, ct tableTarget, trivia []Node
 		if ct != nil {
 			ct.addEntry(t)
 		} else {
-			doc.Nodes = append(doc.Nodes, t)
+			doc.nodes = append(doc.nodes, t)
 		}
 	}
 }
 
 func attachTriviaToLast(doc *Document, trivia []Node) bool {
-	if len(doc.Nodes) == 0 {
+	if len(doc.nodes) == 0 {
 		return false
 	}
-	last := doc.Nodes[len(doc.Nodes)-1]
+	last := doc.nodes[len(doc.nodes)-1]
 	switch v := last.(type) {
 	case *TableNode:
-		if kv := lastKV(v.Entries); kv != nil {
+		if kv := lastKV(v.entries); kv != nil {
 			kv.TrailingTrivia = append(kv.TrailingTrivia, trivia...)
 			return true
 		}
 	case *ArrayOfTables:
-		if kv := lastKV(v.Entries); kv != nil {
+		if kv := lastKV(v.entries); kv != nil {
 			kv.TrailingTrivia = append(kv.TrailingTrivia, trivia...)
 			return true
 		}
@@ -229,8 +239,8 @@ func (p *parser) parseTableHeaderBody(trivia []Node, hdrLine, hdrCol int) (*Tabl
 	return &TableNode{
 		baseNode:       baseNode{nodeType: NodeTable, line: hdrLine, col: hdrCol},
 		LeadingTrivia:  trivia,
-		RawHeader:      rawHeader,
-		HeaderParts:    parts,
+		rawHeader:      rawHeader,
+		headerParts:    parts,
 		TrailingTrivia: trailing,
 		Newline:        nl,
 	}, nil
@@ -259,8 +269,8 @@ func (p *parser) parseArrayOfTablesBody(trivia []Node, hdrLine, hdrCol int) (*Ar
 	return &ArrayOfTables{
 		baseNode:       baseNode{nodeType: NodeArrayOfTables, line: hdrLine, col: hdrCol},
 		LeadingTrivia:  trivia,
-		RawHeader:      rawHeader,
-		HeaderParts:    parts,
+		rawHeader:      rawHeader,
+		headerParts:    parts,
 		TrailingTrivia: trailing,
 		Newline:        nl,
 	}, nil
@@ -428,16 +438,18 @@ func (p *parser) parseKeyVal(trivia []Node) (*KeyValue, error) {
 	}
 	p.lex.valueMode = false // back to key context
 
-	return &KeyValue{
+	kv := &KeyValue{
 		baseNode:      baseNode{nodeType: NodeKeyValue, line: kvLine, col: kvCol},
 		LeadingTrivia: trivia,
-		KeyParts:      parts,
-		RawKey:        rawKey,
+		keyParts:      parts,
+		rawKey:        rawKey,
 		PreEq:         preEq,
 		PostEq:        postEq,
-		Val:           val,
-		RawVal:        val.Text(),
-	}, nil
+		val:           val,
+		rawVal:        val.Text(),
+	}
+	setValueParent(val, kv)
+	return kv, nil
 }
 
 // parseValue parses a TOML value.
@@ -518,7 +530,7 @@ func (p *parser) parseArray() (Node, error) {
 
 	return &ArrayNode{
 		baseNode: baseNode{nodeType: NodeArray},
-		Elements: elements,
+		elements: elements,
 		text:     p.source[startPos:endPos],
 	}, nil
 }
@@ -553,11 +565,15 @@ func (p *parser) parseInlineTable() (Node, error) {
 	closeTok := p.advance()
 	endPos := closeTok.Pos + len(closeTok.Text)
 
-	return &InlineTableNode{
+	it := &InlineTableNode{
 		baseNode: baseNode{nodeType: NodeInlineTable},
-		Entries:  entries,
+		entries:  entries,
 		text:     p.source[startPos:endPos],
-	}, nil
+	}
+	for _, kv := range entries {
+		kv.setParent(it)
+	}
+	return it, nil
 }
 
 func (p *parser) skipWsCommentNewline() {

@@ -11,8 +11,8 @@ func TestParse_EmptyDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(d.Nodes) != 0 {
-		t.Fatalf("expected 0 nodes, got %d", len(d.Nodes))
+	if len(d.nodes) != 0 {
+		t.Fatalf("expected 0 nodes, got %d", len(d.nodes))
 	}
 }
 
@@ -28,21 +28,21 @@ func TestParse_SimpleKeyValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if len(d.Nodes) != 1 {
-		t.Fatalf("expected 1 node, got %d", len(d.Nodes))
+	if len(d.nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(d.nodes))
 	}
-	kv, ok := d.Nodes[0].(*KeyValue)
+	kv, ok := d.nodes[0].(*KeyValue)
 	if !ok {
-		t.Fatalf("expected *KeyValue, got %T", d.Nodes[0])
+		t.Fatalf("expected *KeyValue, got %T", d.nodes[0])
 	}
-	if kv.RawKey != "key" {
-		t.Fatalf("expected key 'key', got %q", kv.RawKey)
+	if kv.rawKey != "key" {
+		t.Fatalf("expected key 'key', got %q", kv.rawKey)
 	}
-	if kv.RawVal != `"value"` {
-		t.Fatalf("expected value '\"value\"', got %q", kv.RawVal)
+	if kv.rawVal != `"value"` {
+		t.Fatalf("expected value '\"value\"', got %q", kv.rawVal)
 	}
-	if kv.Val.Type() != NodeString {
-		t.Fatalf("expected string value, got %v", kv.Val.Type())
+	if kv.val.Type() != NodeString {
+		t.Fatalf("expected string value, got %v", kv.val.Type())
 	}
 }
 
@@ -51,7 +51,7 @@ func TestParse_PreservesWhitespaceAroundEquals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
+	kv := d.nodes[0].(*KeyValue)
 	if kv.PreEq != "  " {
 		t.Fatalf("expected PreEq '  ', got %q", kv.PreEq)
 	}
@@ -65,7 +65,7 @@ func TestParse_TrailingComment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
+	kv := d.nodes[0].(*KeyValue)
 	if len(kv.TrailingTrivia) != 2 {
 		t.Fatalf("expected 2 trailing trivia nodes, got %d", len(kv.TrailingTrivia))
 	}
@@ -84,7 +84,7 @@ func TestParse_LeadingTrivia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
+	kv := d.nodes[0].(*KeyValue)
 	if len(kv.LeadingTrivia) == 0 {
 		t.Fatalf("expected leading trivia")
 	}
@@ -213,7 +213,7 @@ func TestParse_TableHeader(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	var found *TableNode
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		if tn, ok := n.(*TableNode); ok {
 			found = tn
 			break
@@ -222,14 +222,14 @@ func TestParse_TableHeader(t *testing.T) {
 	if found == nil {
 		t.Fatalf("expected TableNode, none found")
 	}
-	if found.RawHeader != "server.settings" {
-		t.Fatalf("unexpected header: %q", found.RawHeader)
+	if found.rawHeader != "server.settings" {
+		t.Fatalf("unexpected header: %q", found.rawHeader)
 	}
-	if len(found.HeaderParts) != 2 {
-		t.Fatalf("expected 2 header parts, got %d", len(found.HeaderParts))
+	if len(found.headerParts) != 2 {
+		t.Fatalf("expected 2 header parts, got %d", len(found.headerParts))
 	}
-	if found.HeaderParts[0].Unquoted != "server" || found.HeaderParts[1].Unquoted != "settings" {
-		t.Fatalf("unexpected header parts: %v", found.HeaderParts)
+	if found.headerParts[0].Unquoted != "server" || found.headerParts[1].Unquoted != "settings" {
+		t.Fatalf("unexpected header parts: %v", found.headerParts)
 	}
 }
 
@@ -240,7 +240,7 @@ func TestParse_ArrayOfTablesHeader(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	var found *ArrayOfTables
-	for _, n := range d.Nodes {
+	for _, n := range d.nodes {
 		if a, ok := n.(*ArrayOfTables); ok {
 			found = a
 			break
@@ -249,11 +249,11 @@ func TestParse_ArrayOfTablesHeader(t *testing.T) {
 	if found == nil {
 		t.Fatalf("expected ArrayOfTables, none found")
 	}
-	if found.RawHeader != "products" {
-		t.Fatalf("unexpected header: %q", found.RawHeader)
+	if found.rawHeader != "products" {
+		t.Fatalf("unexpected header: %q", found.rawHeader)
 	}
-	if len(found.Entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(found.Entries))
+	if len(found.entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(found.entries))
 	}
 }
 
@@ -263,18 +263,18 @@ func TestParse_HierarchicalStructure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if len(d.Nodes) != 2 {
-		t.Fatalf("expected 2 top-level nodes, got %d", len(d.Nodes))
+	if len(d.nodes) != 2 {
+		t.Fatalf("expected 2 top-level nodes, got %d", len(d.nodes))
 	}
-	if _, ok := d.Nodes[0].(*KeyValue); !ok {
-		t.Fatalf("expected first node to be KeyValue, got %T", d.Nodes[0])
+	if _, ok := d.nodes[0].(*KeyValue); !ok {
+		t.Fatalf("expected first node to be KeyValue, got %T", d.nodes[0])
 	}
-	tbl, ok := d.Nodes[1].(*TableNode)
+	tbl, ok := d.nodes[1].(*TableNode)
 	if !ok {
-		t.Fatalf("expected second node to be TableNode, got %T", d.Nodes[1])
+		t.Fatalf("expected second node to be TableNode, got %T", d.nodes[1])
 	}
-	if len(tbl.Entries) != 1 {
-		t.Fatalf("expected 1 entry in table, got %d", len(tbl.Entries))
+	if len(tbl.entries) != 1 {
+		t.Fatalf("expected 1 entry in table, got %d", len(tbl.entries))
 	}
 }
 
@@ -283,12 +283,12 @@ func TestParse_DottedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	if len(kv.KeyParts) != 3 {
-		t.Fatalf("expected 3 key parts, got %d", len(kv.KeyParts))
+	kv := d.nodes[0].(*KeyValue)
+	if len(kv.keyParts) != 3 {
+		t.Fatalf("expected 3 key parts, got %d", len(kv.keyParts))
 	}
-	if kv.KeyParts[0].Unquoted != "a" || kv.KeyParts[1].Unquoted != "b" || kv.KeyParts[2].Unquoted != "c" {
-		t.Fatalf("unexpected key parts: %v", kv.KeyParts)
+	if kv.keyParts[0].Unquoted != "a" || kv.keyParts[1].Unquoted != "b" || kv.keyParts[2].Unquoted != "c" {
+		t.Fatalf("unexpected key parts: %v", kv.keyParts)
 	}
 }
 
@@ -297,14 +297,14 @@ func TestParse_QuotedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	if len(kv.KeyParts) != 1 {
-		t.Fatalf("expected 1 key part, got %d", len(kv.KeyParts))
+	kv := d.nodes[0].(*KeyValue)
+	if len(kv.keyParts) != 1 {
+		t.Fatalf("expected 1 key part, got %d", len(kv.keyParts))
 	}
-	if kv.KeyParts[0].Unquoted != "key with spaces" {
-		t.Fatalf("expected unquoted key 'key with spaces', got %q", kv.KeyParts[0].Unquoted)
+	if kv.keyParts[0].Unquoted != "key with spaces" {
+		t.Fatalf("expected unquoted key 'key with spaces', got %q", kv.keyParts[0].Unquoted)
 	}
-	if !kv.KeyParts[0].IsQuoted {
+	if !kv.keyParts[0].IsQuoted {
 		t.Fatalf("expected key to be marked as quoted")
 	}
 }
@@ -329,9 +329,9 @@ func TestParse_ValueTypes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse error for %q: %v", tt.input, err)
 		}
-		kv := d.Nodes[0].(*KeyValue)
-		if kv.Val.Type() != tt.want {
-			t.Fatalf("for %q: expected value type %v, got %v", tt.input, tt.want, kv.Val.Type())
+		kv := d.nodes[0].(*KeyValue)
+		if kv.val.Type() != tt.want {
+			t.Fatalf("for %q: expected value type %v, got %v", tt.input, tt.want, kv.val.Type())
 		}
 	}
 }
@@ -360,9 +360,9 @@ func TestParse_MultilineBasicString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	if kv.Val.Type() != NodeString {
-		t.Fatalf("expected string, got %v", kv.Val.Type())
+	kv := d.nodes[0].(*KeyValue)
+	if kv.val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.val.Type())
 	}
 	got := d.String()
 	if got != input {
@@ -376,13 +376,13 @@ func TestParse_InlineTableEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	it, ok := kv.Val.(*InlineTableNode)
+	kv := d.nodes[0].(*KeyValue)
+	it, ok := kv.val.(*InlineTableNode)
 	if !ok {
-		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+		t.Fatalf("expected InlineTableNode, got %T", kv.val)
 	}
-	if len(it.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	if len(it.entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.entries))
 	}
 }
 
@@ -393,9 +393,9 @@ func TestParse_SpecialFloats(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse error for %s: %v", v, err)
 		}
-		kv := d.Nodes[0].(*KeyValue)
-		if kv.Val.Type() != NodeNumber {
-			t.Fatalf("for %s: expected number, got %v", v, kv.Val.Type())
+		kv := d.nodes[0].(*KeyValue)
+		if kv.val.Type() != NodeNumber {
+			t.Fatalf("for %s: expected number, got %v", v, kv.val.Type())
 		}
 	}
 }
@@ -414,12 +414,12 @@ func TestParse_HexOctBin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse error for %q: %v", tt.input, err)
 		}
-		kv := d.Nodes[0].(*KeyValue)
-		if kv.Val.Type() != NodeNumber {
-			t.Fatalf("for %q: expected number, got %v", tt.input, kv.Val.Type())
+		kv := d.nodes[0].(*KeyValue)
+		if kv.val.Type() != NodeNumber {
+			t.Fatalf("for %q: expected number, got %v", tt.input, kv.val.Type())
 		}
-		if kv.Val.Text() != tt.val {
-			t.Fatalf("for %q: expected %q, got %q", tt.input, tt.val, kv.Val.Text())
+		if kv.val.Text() != tt.val {
+			t.Fatalf("for %q: expected %q, got %q", tt.input, tt.val, kv.val.Text())
 		}
 	}
 }
@@ -573,9 +573,9 @@ func TestParse_EscapeE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	if kv.Val.Type() != NodeString {
-		t.Fatalf("expected string, got %v", kv.Val.Type())
+	kv := d.nodes[0].(*KeyValue)
+	if kv.val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.val.Type())
 	}
 	got := d.String()
 	if got != input {
@@ -589,9 +589,9 @@ func TestParse_HexEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	if kv.Val.Type() != NodeString {
-		t.Fatalf("expected string, got %v", kv.Val.Type())
+	kv := d.nodes[0].(*KeyValue)
+	if kv.val.Type() != NodeString {
+		t.Fatalf("expected string, got %v", kv.val.Type())
 	}
 }
 
@@ -601,13 +601,13 @@ func TestParse_MultiLineInlineTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	it, ok := kv.Val.(*InlineTableNode)
+	kv := d.nodes[0].(*KeyValue)
+	it, ok := kv.val.(*InlineTableNode)
 	if !ok {
-		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+		t.Fatalf("expected InlineTableNode, got %T", kv.val)
 	}
-	if len(it.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	if len(it.entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.entries))
 	}
 }
 
@@ -617,13 +617,13 @@ func TestParse_TrailingCommaInlineTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	kv := d.Nodes[0].(*KeyValue)
-	it, ok := kv.Val.(*InlineTableNode)
+	kv := d.nodes[0].(*KeyValue)
+	it, ok := kv.val.(*InlineTableNode)
 	if !ok {
-		t.Fatalf("expected InlineTableNode, got %T", kv.Val)
+		t.Fatalf("expected InlineTableNode, got %T", kv.val)
 	}
-	if len(it.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(it.Entries))
+	if len(it.entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(it.entries))
 	}
 }
 
@@ -641,9 +641,9 @@ func TestParse_DateTimeNoSeconds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse error for %q: %v", tt.input, err)
 		}
-		kv := d.Nodes[0].(*KeyValue)
-		if kv.Val.Type() != NodeDateTime {
-			t.Fatalf("for %q: expected datetime, got %v", tt.input, kv.Val.Type())
+		kv := d.nodes[0].(*KeyValue)
+		if kv.val.Type() != NodeDateTime {
+			t.Fatalf("for %q: expected datetime, got %v", tt.input, kv.val.Type())
 		}
 	}
 }
