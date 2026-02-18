@@ -1,6 +1,6 @@
 module github.com/maurice/toml
 
-go 1.25.6
+go 1.24.0
 
 tool (
 	github.com/golangci/golangci-lint/cmd/golangci-lint
