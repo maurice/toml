@@ -3,6 +3,7 @@ package toml
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"strings"
 )
 
@@ -480,6 +481,13 @@ func (d *Document) Walk(visitor func(Node) bool) {
 		return true
 	}
 	walk(d)
+}
+
+// Preorder returns an iterator that yields every node in the CST in pre-order.
+func (d *Document) Preorder() iter.Seq[Node] {
+	return func(yield func(Node) bool) {
+		d.Walk(yield)
+	}
 }
 
 // Tables returns all TableNode nodes in document order.

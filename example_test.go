@@ -58,6 +58,19 @@ func ExampleDocument_Walk() {
 	// 1
 }
 
+func ExampleDocument_Preorder() {
+	doc, _ := toml.Parse([]byte("# comment\nkey = 1\n"))
+	comments := 0
+	for n := range doc.Preorder() {
+		if n.Type() == toml.NodeComment {
+			comments++
+		}
+	}
+	fmt.Println(comments)
+	// Output:
+	// 1
+}
+
 func ExampleDocument_Delete() {
 	doc, _ := toml.Parse([]byte("a = 1\nb = 2\nc = 3\n"))
 	doc.Delete("b")

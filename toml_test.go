@@ -355,6 +355,41 @@ func TestWalk_FindsAllNodeTypes(t *testing.T) {
 	}
 }
 
+func TestPreorder_FindsAllNodeTypes(t *testing.T) {
+	input := "# top\nkey = 1  # tail\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	comments := 0
+	for n := range d.Preorder() {
+		if n.Type() == NodeComment {
+			comments++
+		}
+	}
+	if comments != 2 {
+		t.Fatalf("expected 2 comments, found %d", comments)
+	}
+}
+
+func TestPreorder_EarlyBreak(t *testing.T) {
+	input := "a = 1\nb = 2\nc = 3\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	count := 0
+	for range d.Preorder() {
+		count++
+		if count == 2 {
+			break
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 iterations before break, got %d", count)
+	}
+}
+
 func TestParse_MultilineBasicString(t *testing.T) {
 	input := "s = \"\"\"\nhello\nworld\"\"\"\n"
 	d, err := Parse([]byte(input))
