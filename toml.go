@@ -20,6 +20,12 @@ var (
 	ErrDuplicateKey      = errors.New("duplicate key")
 	ErrKeyConflict       = errors.New("key conflicts with dotted key")
 	ErrIndexOutOfRange   = errors.New("index out of range")
+	ErrInvalidWhitespace = errors.New("invalid whitespace: must contain only spaces and tabs")
+	ErrInvalidNewline    = errors.New("invalid newline: must be empty, \\n, or \\r\\n")
+	ErrInvalidTrivia     = errors.New("invalid trivia node: must be *CommentNode or *WhitespaceNode")
+	ErrCommentNewline    = errors.New("comment text must not contain newlines")
+	ErrCommentControl    = errors.New("comment text contains invalid control character")
+	ErrInvalidWsChar     = errors.New("whitespace text contains non-whitespace character")
 )
 
 // ParseError represents a parsing error with location information.
@@ -127,15 +133,15 @@ type KeyPart struct {
 // KeyValue is a CST node for key = value pairs.
 type KeyValue struct {
 	baseNode
-	LeadingTrivia  []Node    // whitespace/comments before the key
+	leadingTrivia  []Node    // whitespace/comments before the key
 	keyParts       []KeyPart // parsed segments of (possibly dotted) key
 	rawKey         string    // full raw key text as written (e.g. "a . b")
-	PreEq          string    // whitespace between key and =
-	PostEq         string    // whitespace between = and value
+	preEq          string    // whitespace between key and =
+	postEq         string    // whitespace between = and value
 	val            Node      // typed value node
 	rawVal         string    // raw value text as written
-	TrailingTrivia []Node    // trailing comment/whitespace on same line
-	Newline        string    // the line-ending newline if present
+	trailingTrivia []Node    // trailing comment/whitespace on same line
+	newline        string    // the line-ending newline if present
 }
 
 // KeyParts returns a copy of the parsed key segments.
@@ -158,22 +164,93 @@ func (kv *KeyValue) RawVal() string {
 	return kv.rawVal
 }
 
+// LeadingTrivia returns a copy of the leading trivia nodes.
+func (kv *KeyValue) LeadingTrivia() []Node {
+	return append([]Node(nil), kv.leadingTrivia...)
+}
+
+// TrailingTrivia returns a copy of the trailing trivia nodes.
+func (kv *KeyValue) TrailingTrivia() []Node {
+	return append([]Node(nil), kv.trailingTrivia...)
+}
+
+// PreEq returns the whitespace between key and =.
+func (kv *KeyValue) PreEq() string { return kv.preEq }
+
+// PostEq returns the whitespace between = and value.
+func (kv *KeyValue) PostEq() string { return kv.postEq }
+
+// Newline returns the line-ending newline.
+func (kv *KeyValue) Newline() string { return kv.newline }
+
+// SetLeadingTrivia sets the leading trivia nodes.
+// Each node must be a *CommentNode or *WhitespaceNode.
+func (kv *KeyValue) SetLeadingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	kv.leadingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetTrailingTrivia sets the trailing trivia nodes.
+// Each node must be a *CommentNode or *WhitespaceNode.
+func (kv *KeyValue) SetTrailingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	kv.trailingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetPreEq sets the whitespace between key and =.
+// Must contain only spaces and tabs.
+func (kv *KeyValue) SetPreEq(s string) error {
+	if !isHorizWhitespace(s) {
+		return ErrInvalidWhitespace
+	}
+	kv.preEq = s
+	regenerateAncestorText(kv)
+	return nil
+}
+
+// SetPostEq sets the whitespace between = and value.
+// Must contain only spaces and tabs.
+func (kv *KeyValue) SetPostEq(s string) error {
+	if !isHorizWhitespace(s) {
+		return ErrInvalidWhitespace
+	}
+	kv.postEq = s
+	regenerateAncestorText(kv)
+	return nil
+}
+
+// SetNewline sets the line-ending newline.
+// Must be "", "\n", or "\r\n".
+func (kv *KeyValue) SetNewline(s string) error {
+	if !isValidNewline(s) {
+		return ErrInvalidNewline
+	}
+	kv.newline = s
+	return nil
+}
+
 func (kv *KeyValue) Children() []Node {
 	var out []Node
-	out = append(out, kv.LeadingTrivia...)
+	out = append(out, kv.leadingTrivia...)
 	if kv.val != nil {
 		out = append(out, kv.val)
 	}
-	out = append(out, kv.TrailingTrivia...)
+	out = append(out, kv.trailingTrivia...)
 	return out
 }
 
 func (kv *KeyValue) Text() string {
 	var b strings.Builder
 	b.WriteString(kv.rawKey)
-	b.WriteString(kv.PreEq)
+	b.WriteString(kv.preEq)
 	b.WriteString("=")
-	b.WriteString(kv.PostEq)
+	b.WriteString(kv.postEq)
 	if kv.val != nil {
 		b.WriteString(kv.val.Text())
 	}
@@ -183,11 +260,11 @@ func (kv *KeyValue) Text() string {
 // TableNode represents [table.header] and holds child entries.
 type TableNode struct {
 	baseNode
-	LeadingTrivia  []Node
+	leadingTrivia  []Node
 	rawHeader      string // full raw header text between brackets
 	headerParts    []KeyPart
-	TrailingTrivia []Node // trivia after ] on the header line
-	Newline        string
+	trailingTrivia []Node // trivia after ] on the header line
+	newline        string
 	entries        []Node // child KeyValue nodes
 }
 
@@ -206,11 +283,51 @@ func (t *TableNode) Entries() []Node {
 	return append([]Node(nil), t.entries...)
 }
 
+// LeadingTrivia returns a copy of the leading trivia nodes.
+func (t *TableNode) LeadingTrivia() []Node {
+	return append([]Node(nil), t.leadingTrivia...)
+}
+
+// TrailingTrivia returns a copy of the trailing trivia nodes.
+func (t *TableNode) TrailingTrivia() []Node {
+	return append([]Node(nil), t.trailingTrivia...)
+}
+
+// Newline returns the line-ending newline.
+func (t *TableNode) Newline() string { return t.newline }
+
+// SetLeadingTrivia sets the leading trivia nodes.
+func (t *TableNode) SetLeadingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	t.leadingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetTrailingTrivia sets the trailing trivia nodes.
+func (t *TableNode) SetTrailingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	t.trailingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetNewline sets the line-ending newline.
+func (t *TableNode) SetNewline(s string) error {
+	if !isValidNewline(s) {
+		return ErrInvalidNewline
+	}
+	t.newline = s
+	return nil
+}
+
 func (t *TableNode) Children() []Node {
 	var out []Node
-	out = append(out, t.LeadingTrivia...)
+	out = append(out, t.leadingTrivia...)
 	out = append(out, t.entries...)
-	out = append(out, t.TrailingTrivia...)
+	out = append(out, t.trailingTrivia...)
 	return out
 }
 
@@ -221,11 +338,11 @@ func (t *TableNode) Text() string {
 // ArrayOfTables represents [[array.of.tables]] and holds child entries.
 type ArrayOfTables struct {
 	baseNode
-	LeadingTrivia  []Node
+	leadingTrivia  []Node
 	rawHeader      string
 	headerParts    []KeyPart
-	TrailingTrivia []Node
-	Newline        string
+	trailingTrivia []Node
+	newline        string
 	entries        []Node
 }
 
@@ -244,11 +361,51 @@ func (a *ArrayOfTables) Entries() []Node {
 	return append([]Node(nil), a.entries...)
 }
 
+// LeadingTrivia returns a copy of the leading trivia nodes.
+func (a *ArrayOfTables) LeadingTrivia() []Node {
+	return append([]Node(nil), a.leadingTrivia...)
+}
+
+// TrailingTrivia returns a copy of the trailing trivia nodes.
+func (a *ArrayOfTables) TrailingTrivia() []Node {
+	return append([]Node(nil), a.trailingTrivia...)
+}
+
+// Newline returns the line-ending newline.
+func (a *ArrayOfTables) Newline() string { return a.newline }
+
+// SetLeadingTrivia sets the leading trivia nodes.
+func (a *ArrayOfTables) SetLeadingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	a.leadingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetTrailingTrivia sets the trailing trivia nodes.
+func (a *ArrayOfTables) SetTrailingTrivia(nodes []Node) error {
+	if err := validateTriviaNodes(nodes); err != nil {
+		return err
+	}
+	a.trailingTrivia = append([]Node(nil), nodes...)
+	return nil
+}
+
+// SetNewline sets the line-ending newline.
+func (a *ArrayOfTables) SetNewline(s string) error {
+	if !isValidNewline(s) {
+		return ErrInvalidNewline
+	}
+	a.newline = s
+	return nil
+}
+
 func (a *ArrayOfTables) Children() []Node {
 	var out []Node
-	out = append(out, a.LeadingTrivia...)
+	out = append(out, a.leadingTrivia...)
 	out = append(out, a.entries...)
-	out = append(out, a.TrailingTrivia...)
+	out = append(out, a.trailingTrivia...)
 	return out
 }
 
@@ -376,37 +533,37 @@ func serializeTrivia(b *strings.Builder, nodes []Node) {
 }
 
 func serializeKeyValue(b *strings.Builder, kv *KeyValue) {
-	serializeTrivia(b, kv.LeadingTrivia)
+	serializeTrivia(b, kv.leadingTrivia)
 	b.WriteString(kv.rawKey)
-	b.WriteString(kv.PreEq)
+	b.WriteString(kv.preEq)
 	b.WriteString("=")
-	b.WriteString(kv.PostEq)
+	b.WriteString(kv.postEq)
 	if kv.val != nil {
 		b.WriteString(kv.val.Text())
 	}
-	serializeTrivia(b, kv.TrailingTrivia)
-	b.WriteString(kv.Newline)
+	serializeTrivia(b, kv.trailingTrivia)
+	b.WriteString(kv.newline)
 }
 
 func serializeTableNode(b *strings.Builder, t *TableNode) {
-	serializeTrivia(b, t.LeadingTrivia)
+	serializeTrivia(b, t.leadingTrivia)
 	b.WriteString("[")
 	b.WriteString(t.rawHeader)
 	b.WriteString("]")
-	serializeTrivia(b, t.TrailingTrivia)
-	b.WriteString(t.Newline)
+	serializeTrivia(b, t.trailingTrivia)
+	b.WriteString(t.newline)
 	for _, entry := range t.entries {
 		serializeNode(b, entry)
 	}
 }
 
 func serializeArrayOfTables(b *strings.Builder, a *ArrayOfTables) {
-	serializeTrivia(b, a.LeadingTrivia)
+	serializeTrivia(b, a.leadingTrivia)
 	b.WriteString("[[")
 	b.WriteString(a.rawHeader)
 	b.WriteString("]]")
-	serializeTrivia(b, a.TrailingTrivia)
-	b.WriteString(a.Newline)
+	serializeTrivia(b, a.trailingTrivia)
+	b.WriteString(a.newline)
 	for _, entry := range a.entries {
 		serializeNode(b, entry)
 	}
@@ -433,4 +590,37 @@ func Parse(b []byte) (*Document, error) {
 		return nil, err
 	}
 	return doc, nil
+}
+
+// --- Validation helpers for setters ---
+
+// validateTriviaNodes checks that each node is a *CommentNode or *WhitespaceNode.
+func validateTriviaNodes(nodes []Node) error {
+	for _, n := range nodes {
+		if n == nil {
+			return ErrInvalidTrivia
+		}
+		switch n.(type) {
+		case *CommentNode, *WhitespaceNode:
+			// ok
+		default:
+			return ErrInvalidTrivia
+		}
+	}
+	return nil
+}
+
+// isHorizWhitespace returns true if s contains only spaces and tabs (or is empty).
+func isHorizWhitespace(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] != ' ' && s[i] != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidNewline returns true if s is "", "\n", or "\r\n".
+func isValidNewline(s string) bool {
+	return s == "" || s == "\n" || s == "\r\n"
 }

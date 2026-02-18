@@ -58,10 +58,10 @@ func validateDocumentNode(node Node) error {
 		return ErrNilNode
 	}
 	switch node.(type) {
-	case *KeyValue, *TableNode, *ArrayOfTables:
+	case *KeyValue, *TableNode, *ArrayOfTables, *CommentNode, *WhitespaceNode:
 		return nil
 	default:
-		return fmt.Errorf("%w: %T; expected *KeyValue, *TableNode, or *ArrayOfTables", ErrInvalidNodeType, node)
+		return fmt.Errorf("%w: %T; expected *KeyValue, *TableNode, *ArrayOfTables, *CommentNode, or *WhitespaceNode", ErrInvalidNodeType, node)
 	}
 }
 
@@ -161,11 +161,11 @@ func NewKeyValue(rawKey string, val Node) (*KeyValue, error) {
 		baseNode: baseNode{nodeType: NodeKeyValue},
 		keyParts: parts,
 		rawKey:   keyRaw,
-		PreEq:    " ",
-		PostEq:   " ",
+		preEq:    " ",
+		postEq:   " ",
 		val:      val,
 		rawVal:   val.Text(),
-		Newline:  "\n",
+		newline:  "\n",
 	}
 	setValueParent(val, kv)
 	return kv, nil
@@ -183,7 +183,7 @@ func NewTable(rawKey string) (*TableNode, error) {
 		baseNode:    baseNode{nodeType: NodeTable},
 		rawHeader:   rawKey,
 		headerParts: parts,
-		Newline:     "\n",
+		newline:     "\n",
 	}, nil
 }
 
@@ -199,7 +199,7 @@ func NewArrayOfTables(rawKey string) (*ArrayOfTables, error) {
 		baseNode:    baseNode{nodeType: NodeArrayOfTables},
 		rawHeader:   rawKey,
 		headerParts: parts,
-		Newline:     "\n",
+		newline:     "\n",
 	}, nil
 }
 
@@ -289,9 +289,9 @@ func generateInlineTableText(entries []*KeyValue) string {
 			b.WriteString(", ")
 		}
 		b.WriteString(kv.rawKey)
-		b.WriteString(kv.PreEq)
+		b.WriteString(kv.preEq)
 		b.WriteByte('=')
-		b.WriteString(kv.PostEq)
+		b.WriteString(kv.postEq)
 		if kv.val != nil {
 			b.WriteString(kv.val.Text())
 		}
@@ -310,6 +310,10 @@ func setNodeParent(n Node, parent Node) {
 	case *TableNode:
 		v.setParent(parent)
 	case *ArrayOfTables:
+		v.setParent(parent)
+	case *CommentNode:
+		v.setParent(parent)
+	case *WhitespaceNode:
 		v.setParent(parent)
 	}
 }
@@ -470,12 +474,20 @@ func (d *Document) DeleteTable(path string) bool {
 }
 
 // Append adds a node to the end of the document's top-level nodes.
-// The node must be a *KeyValue, *TableNode, or *ArrayOfTables.
+// The node must be a *KeyValue, *TableNode, *ArrayOfTables, *CommentNode,
+// or *WhitespaceNode.
 // Returns an error if the node would create an invalid document
 // (e.g., duplicate keys, duplicate tables, or structural conflicts).
+// Comment and whitespace nodes skip structural validation.
 func (d *Document) Append(node Node) error {
 	if err := validateDocumentNode(node); err != nil {
 		return err
+	}
+	// Trivia nodes don't affect TOML structure; skip validation.
+	if isTriviaNode(node) {
+		d.nodes = append(d.nodes, node)
+		setNodeParent(node, d)
+		return nil
 	}
 	// Tentatively add.
 	d.nodes = append(d.nodes, node)
@@ -493,6 +505,7 @@ func (d *Document) Append(node Node) error {
 // InsertAt inserts a node at position i in the document's top-level nodes.
 // If i is out of range, the node is appended.
 // Returns an error if the node would create an invalid document.
+// Comment and whitespace nodes skip structural validation.
 func (d *Document) InsertAt(i int, node Node) error {
 	if err := validateDocumentNode(node); err != nil {
 		return err
@@ -502,6 +515,12 @@ func (d *Document) InsertAt(i int, node Node) error {
 	}
 	if i >= len(d.nodes) {
 		return d.Append(node)
+	}
+	// Trivia nodes don't affect TOML structure; skip validation.
+	if isTriviaNode(node) {
+		d.nodes = append(d.nodes[:i], append([]Node{node}, d.nodes[i:]...)...)
+		setNodeParent(node, d)
+		return nil
 	}
 	// Tentatively insert.
 	d.nodes = append(d.nodes[:i], append([]Node{node}, d.nodes[i:]...)...)
@@ -514,6 +533,15 @@ func (d *Document) InsertAt(i int, node Node) error {
 		return err
 	}
 	return nil
+}
+
+// isTriviaNode returns true if n is a *CommentNode or *WhitespaceNode.
+func isTriviaNode(n Node) bool {
+	switch n.(type) {
+	case *CommentNode, *WhitespaceNode:
+		return true
+	}
+	return false
 }
 
 // --- TableNode mutation ---
@@ -704,4 +732,100 @@ func (n *InlineTableNode) Delete(key string) bool {
 		}
 	}
 	return false
+}
+
+// --- Convenience constructors ---
+
+// NewComment creates a CommentNode with the given text.
+// The text should be the full comment including the leading "#".
+// Returns an error if the text contains newlines or control characters
+// other than tab.
+func NewComment(text string) (*CommentNode, error) {
+	for _, r := range text {
+		if r == '\n' || r == '\r' {
+			return nil, ErrCommentNewline
+		}
+		if r < 0x09 || (r > 0x0A && r < 0x0D) || (r > 0x0D && r < 0x20) || r == 0x7F {
+			return nil, fmt.Errorf("%w: U+%04X", ErrCommentControl, r)
+		}
+	}
+	return &CommentNode{leafNode: newLeaf(NodeComment, text)}, nil
+}
+
+// NewWhitespace creates a WhitespaceNode from the given string.
+// The string must contain only spaces, tabs, newlines (\n), or carriage
+// returns (\r).
+func NewWhitespace(text string) (*WhitespaceNode, error) {
+	for _, c := range text {
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			return nil, fmt.Errorf("%w: %q", ErrInvalidWsChar, c)
+		}
+	}
+	return &WhitespaceNode{leafNode: newLeaf(NodeWhitespace, text)}, nil
+}
+
+// --- Document convenience methods ---
+
+// AppendComment appends a "# text" comment followed by a newline to the
+// document. The text parameter is the comment content without the leading
+// "# ".
+func (d *Document) AppendComment(text string) error {
+	cn, err := NewComment("# " + text)
+	if err != nil {
+		return err
+	}
+	if err := d.Append(cn); err != nil {
+		return err
+	}
+	ws, _ := NewWhitespace("\n")
+	return d.Append(ws)
+}
+
+// AppendBlankLine appends a blank line ("\n") to the document.
+func (d *Document) AppendBlankLine() error {
+	ws, _ := NewWhitespace("\n")
+	return d.Append(ws)
+}
+
+// --- TableNode convenience methods ---
+
+// AppendComment appends a "# text" comment followed by a newline to the
+// table's entries.
+func (t *TableNode) AppendComment(text string) error {
+	cn, err := NewComment("# " + text)
+	if err != nil {
+		return err
+	}
+	t.addEntry(cn)
+	ws, _ := NewWhitespace("\n")
+	t.addEntry(ws)
+	return nil
+}
+
+// AppendBlankLine appends a blank line ("\n") to the table's entries.
+func (t *TableNode) AppendBlankLine() {
+	ws, _ := NewWhitespace("\n")
+	t.addEntry(ws)
+}
+
+// --- ArrayOfTables convenience methods ---
+
+// AppendComment appends a "# text" comment followed by a newline to the
+// array-of-tables' entries.
+func (a *ArrayOfTables) AppendComment(text string) error {
+	cn, err := NewComment("# " + text)
+	if err != nil {
+		return err
+	}
+	a.addEntry(cn)
+	ws, _ := NewWhitespace("\n")
+	a.addEntry(ws)
+	return nil
+}
+
+// AppendBlankLine appends a blank line ("\n") to the array-of-tables'
+// entries.
+func (a *ArrayOfTables) AppendBlankLine() {
+	ws, _ := NewWhitespace("\n")
+	a.addEntry(ws)
 }

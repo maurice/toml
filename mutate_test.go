@@ -107,11 +107,11 @@ func TestNewKeyValue(t *testing.T) {
 	if kv.rawVal != `"Alice"` {
 		t.Fatalf("expected val '\"Alice\"', got %q", kv.rawVal)
 	}
-	if kv.PreEq != " " || kv.PostEq != " " {
+	if kv.PreEq() != " " || kv.PostEq() != " " {
 		t.Fatalf("expected standard spacing around =")
 	}
-	if kv.Newline != "\n" {
-		t.Fatalf("expected newline, got %q", kv.Newline)
+	if kv.Newline() != "\n" {
+		t.Fatalf("expected newline, got %q", kv.Newline())
 	}
 }
 
@@ -152,8 +152,8 @@ func TestNewTable(t *testing.T) {
 	if len(tbl.headerParts) != 2 {
 		t.Fatalf("expected 2 header parts, got %d", len(tbl.headerParts))
 	}
-	if tbl.Newline != "\n" {
-		t.Fatalf("expected newline, got %q", tbl.Newline)
+	if tbl.Newline() != "\n" {
+		t.Fatalf("expected newline, got %q", tbl.Newline())
 	}
 }
 
@@ -876,7 +876,7 @@ func TestDocument_Append_RejectsInvalidType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if err := d.Append(&CommentNode{}); err == nil {
+	if err := d.Append(&StringNode{}); err == nil {
 		t.Fatal("expected error for invalid node type")
 	}
 }
@@ -897,5 +897,264 @@ func TestTableNode_Append_RejectsNil(t *testing.T) {
 	tbl, _ := NewTable("t")
 	if err := tbl.Append(nil); err == nil {
 		t.Fatal("expected error for nil key-value")
+	}
+}
+
+// --- Document.Append/InsertAt comment/whitespace tests ---
+
+func TestDocument_Append_Comment(t *testing.T) {
+	d, err := Parse([]byte("a = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	cn := &CommentNode{leafNode: newLeaf(NodeComment, "# hello")}
+	if err := d.Append(cn); err != nil {
+		t.Fatalf("Append comment: %v", err)
+	}
+	got := d.String()
+	expected := "a = 1\n# hello"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestDocument_Append_Whitespace(t *testing.T) {
+	d, err := Parse([]byte("a = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	ws := &WhitespaceNode{leafNode: newLeaf(NodeWhitespace, "\n")}
+	if err := d.Append(ws); err != nil {
+		t.Fatalf("Append whitespace: %v", err)
+	}
+	got := d.String()
+	expected := "a = 1\n\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestDocument_InsertAt_Comment(t *testing.T) {
+	d, err := Parse([]byte("a = 1\nb = 2\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	cn := &CommentNode{leafNode: newLeaf(NodeComment, "# between")}
+	ws := &WhitespaceNode{leafNode: newLeaf(NodeWhitespace, "\n")}
+	if err := d.InsertAt(1, ws); err != nil {
+		t.Fatalf("InsertAt whitespace: %v", err)
+	}
+	if err := d.InsertAt(1, cn); err != nil {
+		t.Fatalf("InsertAt comment: %v", err)
+	}
+	got := d.String()
+	expected := "a = 1\n# between\nb = 2\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+// --- Setter validation tests ---
+
+func TestSetPreEq_RejectsNonWhitespace(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetPreEq("abc"); err == nil {
+		t.Fatal("expected error for non-whitespace in PreEq")
+	}
+}
+
+func TestSetPostEq_RejectsNonWhitespace(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetPostEq("\n"); err == nil {
+		t.Fatal("expected error for newline in PostEq")
+	}
+}
+
+func TestSetNewline_RejectsInvalid(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetNewline("abc"); err == nil {
+		t.Fatal("expected error for invalid newline")
+	}
+	if err := kv.SetNewline("\r"); err == nil {
+		t.Fatal("expected error for bare CR newline")
+	}
+}
+
+func TestSetNewline_AcceptsValid(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	for _, nl := range []string{"", "\n", "\r\n"} {
+		if err := kv.SetNewline(nl); err != nil {
+			t.Fatalf("SetNewline(%q): %v", nl, err)
+		}
+	}
+}
+
+func TestSetLeadingTrivia_RejectsInvalidNode(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetLeadingTrivia([]Node{&StringNode{}}); err == nil {
+		t.Fatal("expected error for non-trivia node in leading trivia")
+	}
+}
+
+func TestSetTrailingTrivia_RejectsNilElement(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	if err := kv.SetTrailingTrivia([]Node{nil}); err == nil {
+		t.Fatal("expected error for nil element in trailing trivia")
+	}
+}
+
+func TestSetLeadingTrivia_AcceptsValid(t *testing.T) {
+	kv, _ := NewKeyValue("key", NewString("val"))
+	nodes := []Node{
+		&CommentNode{leafNode: newLeaf(NodeComment, "# hello")},
+		&WhitespaceNode{leafNode: newLeaf(NodeWhitespace, "\n")},
+	}
+	if err := kv.SetLeadingTrivia(nodes); err != nil {
+		t.Fatalf("SetLeadingTrivia: %v", err)
+	}
+	got := kv.LeadingTrivia()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 trivia nodes, got %d", len(got))
+	}
+}
+
+// --- NewComment / NewWhitespace tests ---
+
+func TestNewComment_Valid(t *testing.T) {
+	cn, err := NewComment("# this is a comment")
+	if err != nil {
+		t.Fatalf("NewComment: %v", err)
+	}
+	if cn.Text() != "# this is a comment" {
+		t.Fatalf("expected '# this is a comment', got %q", cn.Text())
+	}
+	if cn.Type() != NodeComment {
+		t.Fatalf("expected NodeComment, got %v", cn.Type())
+	}
+}
+
+func TestNewComment_RejectsNewlines(t *testing.T) {
+	_, err := NewComment("# line1\nline2")
+	if err == nil {
+		t.Fatal("expected error for newline in comment")
+	}
+}
+
+func TestNewComment_RejectsControlChars(t *testing.T) {
+	_, err := NewComment("# bad\x01char")
+	if err == nil {
+		t.Fatal("expected error for control character in comment")
+	}
+}
+
+func TestNewWhitespace_Valid(t *testing.T) {
+	ws, err := NewWhitespace("\n\n")
+	if err != nil {
+		t.Fatalf("NewWhitespace: %v", err)
+	}
+	if ws.Text() != "\n\n" {
+		t.Fatalf("expected '\\n\\n', got %q", ws.Text())
+	}
+	if ws.Type() != NodeWhitespace {
+		t.Fatalf("expected NodeWhitespace, got %v", ws.Type())
+	}
+}
+
+func TestNewWhitespace_RejectsNonWhitespace(t *testing.T) {
+	_, err := NewWhitespace("abc")
+	if err == nil {
+		t.Fatal("expected error for non-whitespace characters")
+	}
+}
+
+// --- AppendComment / AppendBlankLine tests ---
+
+func TestDocument_AppendComment(t *testing.T) {
+	d, err := Parse([]byte("a = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if err := d.AppendComment("added by script"); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	got := d.String()
+	expected := "a = 1\n# added by script\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestDocument_AppendBlankLine(t *testing.T) {
+	d, err := Parse([]byte("a = 1\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if err := d.AppendBlankLine(); err != nil {
+		t.Fatalf("AppendBlankLine: %v", err)
+	}
+	got := d.String()
+	expected := "a = 1\n\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestTableNode_AppendComment(t *testing.T) {
+	d, err := Parse([]byte("[server]\nhost = \"localhost\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	tbl := d.Table("server")
+	if err := tbl.AppendComment("end of server section"); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	got := d.String()
+	expected := "[server]\nhost = \"localhost\"\n# end of server section\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestTableNode_AppendBlankLine(t *testing.T) {
+	d, err := Parse([]byte("[server]\nhost = \"localhost\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	tbl := d.Table("server")
+	tbl.AppendBlankLine()
+	got := d.String()
+	expected := "[server]\nhost = \"localhost\"\n\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestArrayOfTables_AppendComment(t *testing.T) {
+	d, err := Parse([]byte("[[items]]\nname = \"widget\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	aots := d.ArraysOfTables()
+	if err := aots[0].AppendComment("item note"); err != nil {
+		t.Fatalf("AppendComment: %v", err)
+	}
+	got := d.String()
+	expected := "[[items]]\nname = \"widget\"\n# item note\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestArrayOfTables_AppendBlankLine(t *testing.T) {
+	d, err := Parse([]byte("[[items]]\nname = \"widget\"\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	aots := d.ArraysOfTables()
+	aots[0].AppendBlankLine()
+	got := d.String()
+	expected := "[[items]]\nname = \"widget\"\n\n"
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }

@@ -138,16 +138,16 @@ func attachTriviaToLast(doc *Document, trivia []Node) bool {
 	switch v := last.(type) {
 	case *TableNode:
 		if kv := lastKV(v.entries); kv != nil {
-			kv.TrailingTrivia = append(kv.TrailingTrivia, trivia...)
+			kv.trailingTrivia = append(kv.trailingTrivia, trivia...)
 			return true
 		}
 	case *ArrayOfTables:
 		if kv := lastKV(v.entries); kv != nil {
-			kv.TrailingTrivia = append(kv.TrailingTrivia, trivia...)
+			kv.trailingTrivia = append(kv.trailingTrivia, trivia...)
 			return true
 		}
 	case *KeyValue:
-		v.TrailingTrivia = append(v.TrailingTrivia, trivia...)
+		v.trailingTrivia = append(v.trailingTrivia, trivia...)
 		return true
 	}
 	return false
@@ -184,7 +184,7 @@ func (p *parser) collectLeadingTrivia() ([]Node, error) {
 func (p *parser) addTrailingTrivia(kv *KeyValue) error {
 	if p.at(TokWhitespace) {
 		tok := p.advance()
-		kv.TrailingTrivia = append(kv.TrailingTrivia,
+		kv.trailingTrivia = append(kv.trailingTrivia,
 			&WhitespaceNode{leafNode: newLeaf(NodeWhitespace, tok.Text)})
 	}
 	if p.at(TokComment) {
@@ -192,12 +192,12 @@ func (p *parser) addTrailingTrivia(kv *KeyValue) error {
 		if msg := validateCommentText(tok.Text); msg != "" {
 			return p.tokError(msg, tok)
 		}
-		kv.TrailingTrivia = append(kv.TrailingTrivia,
+		kv.trailingTrivia = append(kv.trailingTrivia,
 			&CommentNode{leafNode: newLeaf(NodeComment, tok.Text)})
 	}
 	if p.at(TokNewline) {
 		tok := p.advance()
-		kv.Newline = tok.Text
+		kv.newline = tok.Text
 		return nil
 	}
 	if p.at(TokEOF) {
@@ -238,11 +238,11 @@ func (p *parser) parseTableHeaderBody(trivia []Node, hdrLine, hdrCol int) (*Tabl
 
 	return &TableNode{
 		baseNode:       baseNode{nodeType: NodeTable, line: hdrLine, col: hdrCol},
-		LeadingTrivia:  trivia,
+		leadingTrivia:  trivia,
 		rawHeader:      rawHeader,
 		headerParts:    parts,
-		TrailingTrivia: trailing,
-		Newline:        nl,
+		trailingTrivia: trailing,
+		newline:        nl,
 	}, nil
 }
 
@@ -268,11 +268,11 @@ func (p *parser) parseArrayOfTablesBody(trivia []Node, hdrLine, hdrCol int) (*Ar
 
 	return &ArrayOfTables{
 		baseNode:       baseNode{nodeType: NodeArrayOfTables, line: hdrLine, col: hdrCol},
-		LeadingTrivia:  trivia,
+		leadingTrivia:  trivia,
 		rawHeader:      rawHeader,
 		headerParts:    parts,
-		TrailingTrivia: trailing,
-		Newline:        nl,
+		trailingTrivia: trailing,
+		newline:        nl,
 	}, nil
 }
 
@@ -440,11 +440,11 @@ func (p *parser) parseKeyVal(trivia []Node) (*KeyValue, error) {
 
 	kv := &KeyValue{
 		baseNode:      baseNode{nodeType: NodeKeyValue, line: kvLine, col: kvCol},
-		LeadingTrivia: trivia,
+		leadingTrivia: trivia,
 		keyParts:      parts,
 		rawKey:        rawKey,
-		PreEq:         preEq,
-		PostEq:        postEq,
+		preEq:         preEq,
+		postEq:        postEq,
 		val:           val,
 		rawVal:        val.Text(),
 	}

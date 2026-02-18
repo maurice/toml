@@ -218,6 +218,36 @@ func (a *ArrayOfTables) Get(key string) *KeyValue {
 	return findInEntries(a.entries, segs)
 }
 
+// ArrayOfTables returns all ArrayOfTables nodes matching the given dotted path.
+func (d *Document) ArrayOfTables(path string) []*ArrayOfTables {
+	segs := parseDottedPath(path)
+	var out []*ArrayOfTables
+	for _, n := range d.nodes {
+		if a, ok := n.(*ArrayOfTables); ok {
+			if matchKeyParts(a.headerParts, segs) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}
+
+// --- ArrayNode query methods ---
+
+// Len returns the number of elements in the array.
+func (a *ArrayNode) Len() int {
+	return len(a.elements)
+}
+
+// Element returns the element at index i.
+// Returns nil if the index is out of bounds.
+func (a *ArrayNode) Element(i int) Node {
+	if i < 0 || i >= len(a.elements) {
+		return nil
+	}
+	return a.elements[i]
+}
+
 // --- InlineTableNode query methods ---
 
 // Get finds a KeyValue within the inline table's entries by dotted key path.

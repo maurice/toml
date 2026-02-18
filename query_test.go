@@ -721,3 +721,133 @@ func TestDocument_Delete_QuotedDottedKey(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }
+
+// --- Document.ArrayOfTables(path) tests ---
+
+func TestDocument_ArrayOfTables_ByPath(t *testing.T) {
+	input := "[[products]]\nname = \"Widget\"\n\n[[products]]\nname = \"Gadget\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	aots := d.ArrayOfTables("products")
+	if len(aots) != 2 {
+		t.Fatalf("expected 2 array-of-tables, got %d", len(aots))
+	}
+	// Verify they have the right entries.
+	s0, ok := aots[0].Get("name").Val().(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", aots[0].Get("name").Val())
+	}
+	if s0.Value() != "Widget" {
+		t.Fatalf("expected 'Widget', got %q", s0.Value())
+	}
+	s1, ok := aots[1].Get("name").Val().(*StringNode)
+	if !ok {
+		t.Fatalf("expected StringNode, got %T", aots[1].Get("name").Val())
+	}
+	if s1.Value() != "Gadget" {
+		t.Fatalf("expected 'Gadget', got %q", s1.Value())
+	}
+}
+
+func TestDocument_ArrayOfTables_NoMatch(t *testing.T) {
+	input := "[[products]]\nname = \"Widget\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	aots := d.ArrayOfTables("missing")
+	if len(aots) != 0 {
+		t.Fatalf("expected 0 array-of-tables for 'missing', got %d", len(aots))
+	}
+}
+
+func TestDocument_ArrayOfTables_FiltersByPath(t *testing.T) {
+	input := "[[products]]\nname = \"Widget\"\n[[items]]\nname = \"Gadget\"\n[[products]]\nname = \"Bolt\"\n"
+	d, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	aots := d.ArrayOfTables("products")
+	if len(aots) != 2 {
+		t.Fatalf("expected 2 array-of-tables for 'products', got %d", len(aots))
+	}
+}
+
+// --- ArrayNode.Len / ArrayNode.Element tests ---
+
+func TestArrayNode_Len(t *testing.T) {
+	d, err := Parse([]byte("arr = [1, 2, 3]\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("arr")
+	arr, ok := kv.Val().(*ArrayNode)
+	if !ok {
+		t.Fatalf("expected ArrayNode, got %T", kv.Val())
+	}
+	if arr.Len() != 3 {
+		t.Fatalf("expected Len() == 3, got %d", arr.Len())
+	}
+}
+
+func TestArrayNode_Len_Empty(t *testing.T) {
+	d, err := Parse([]byte("arr = []\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("arr")
+	arr, ok := kv.Val().(*ArrayNode)
+	if !ok {
+		t.Fatalf("expected ArrayNode, got %T", kv.Val())
+	}
+	if arr.Len() != 0 {
+		t.Fatalf("expected Len() == 0, got %d", arr.Len())
+	}
+}
+
+func TestArrayNode_Element(t *testing.T) {
+	d, err := Parse([]byte("arr = [10, 20, 30]\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("arr")
+	arr, ok := kv.Val().(*ArrayNode)
+	if !ok {
+		t.Fatalf("expected ArrayNode, got %T", kv.Val())
+	}
+	elem := arr.Element(1)
+	if elem == nil {
+		t.Fatal("expected non-nil element at index 1")
+	}
+	n, ok := elem.(*NumberNode)
+	if !ok {
+		t.Fatalf("expected NumberNode, got %T", elem)
+	}
+	v, err := n.Int()
+	if err != nil {
+		t.Fatalf("Int() error: %v", err)
+	}
+	if v != 20 {
+		t.Fatalf("expected 20, got %d", v)
+	}
+}
+
+func TestArrayNode_Element_OutOfBounds(t *testing.T) {
+	d, err := Parse([]byte("arr = [1, 2]\n"))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	kv := d.Get("arr")
+	arr, ok := kv.Val().(*ArrayNode)
+	if !ok {
+		t.Fatalf("expected ArrayNode, got %T", kv.Val())
+	}
+	if arr.Element(5) != nil {
+		t.Fatal("expected nil for out-of-bounds index")
+	}
+	if arr.Element(-1) != nil {
+		t.Fatal("expected nil for negative index")
+	}
+}

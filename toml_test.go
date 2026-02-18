@@ -52,11 +52,11 @@ func TestParse_PreservesWhitespaceAroundEquals(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	kv := d.nodes[0].(*KeyValue)
-	if kv.PreEq != "  " {
-		t.Fatalf("expected PreEq '  ', got %q", kv.PreEq)
+	if kv.PreEq() != "  " {
+		t.Fatalf("expected PreEq '  ', got %q", kv.PreEq())
 	}
-	if kv.PostEq != "  " {
-		t.Fatalf("expected PostEq '  ', got %q", kv.PostEq)
+	if kv.PostEq() != "  " {
+		t.Fatalf("expected PostEq '  ', got %q", kv.PostEq())
 	}
 }
 
@@ -66,10 +66,11 @@ func TestParse_TrailingComment(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	kv := d.nodes[0].(*KeyValue)
-	if len(kv.TrailingTrivia) != 2 {
-		t.Fatalf("expected 2 trailing trivia nodes, got %d", len(kv.TrailingTrivia))
+	trailing := kv.TrailingTrivia()
+	if len(trailing) != 2 {
+		t.Fatalf("expected 2 trailing trivia nodes, got %d", len(trailing))
 	}
-	comment := kv.TrailingTrivia[1]
+	comment := trailing[1]
 	if comment.Type() != NodeComment {
 		t.Fatalf("expected comment node, got %v", comment.Type())
 	}
@@ -85,11 +86,11 @@ func TestParse_LeadingTrivia(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 	kv := d.nodes[0].(*KeyValue)
-	if len(kv.LeadingTrivia) == 0 {
+	if len(kv.LeadingTrivia()) == 0 {
 		t.Fatalf("expected leading trivia")
 	}
 	hasComment := false
-	for _, n := range kv.LeadingTrivia {
+	for _, n := range kv.LeadingTrivia() {
 		if n.Type() == NodeComment {
 			hasComment = true
 			if !strings.Contains(n.Text(), "comment before") {
